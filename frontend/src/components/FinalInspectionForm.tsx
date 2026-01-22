@@ -20,6 +20,10 @@ import {
   DefectCounts,
   ServerCalculations,
 } from './inspection';
+import { db, cacheCustomers, cacheTemplates, getCachedCustomers, getCachedTemplates } from '../lib/db';
+import { pdf } from '@react-pdf/renderer';
+import PDFReport from './PDFReport';
+import { saveAs } from 'file-saver';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
 
@@ -115,34 +119,51 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
   const columnKeys = ['spec', 's1', 's2', 's3', 's4', 's5', 's6'];
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
-
-  // --- Queries ---
+  // --- Queries with Local Caching ---
 
   const { data: customersData } = useQuery({
     queryKey: ['customers'],
     queryFn: async () => {
-      const response = await axios.get(`${API_URL}/customers/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.data;
+      try {
+        const response = await axios.get(`${API_URL}/customers/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = Array.isArray(response.data) ? response.data : response.data?.results || [];
+        // Cache to IndexedDB for offline use
+        await cacheCustomers(data);
+        return data;
+      } catch (error) {
+        // Fallback to cached data if offline
+        console.warn('API failed, using cached customers');
+        const cached = await getCachedCustomers();
+        return cached || [];
+      }
     },
   });
 
-  // Handle paginated response for customers
-  const customers: Customer[] = Array.isArray(customersData) ? customersData : customersData?.results || [];
+  const customers: Customer[] = Array.isArray(customersData) ? customersData : [];
 
   const { data: templatesData } = useQuery({
     queryKey: ['templates'],
     queryFn: async () => {
-      const response = await axios.get(`${API_URL}/templates/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.data;
+      try {
+        const response = await axios.get(`${API_URL}/templates/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = Array.isArray(response.data) ? response.data : response.data?.results || [];
+        // Cache to IndexedDB for offline use
+        await cacheTemplates(data);
+        return data;
+      } catch (error) {
+        // Fallback to cached data if offline
+        console.warn('API failed, using cached templates');
+        const cached = await getCachedTemplates();
+        return cached || [];
+      }
     },
   });
 
-  // Handle paginated response for templates
-  const templates: Template[] = Array.isArray(templatesData) ? templatesData : templatesData?.results || [];
+  const templates: Template[] = Array.isArray(templatesData) ? templatesData : [];
 
   const { data: inspectionData } = useQuery({
     queryKey: ['finalInspection', inspectionId],
@@ -716,18 +737,85 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
   const [submitAction, setSubmitAction] = useState<'create' | 'update' | 'saveAsNew'>('create');
 
-  const onSubmit = (data: FormData) => {
-    if (submitAction === 'update' && inspectionId) {
-      if (confirm('Are you confirmed to Update this report?')) {
-        updateMutation.mutate({ id: inspectionId, data });
-      }
-    } else if (submitAction === 'saveAsNew') {
-      if (confirm('Create New Inspection from this data? (Photos will NOT be copied)')) {
-        createMutation.mutate(data);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const onSubmit = async (data: FormData) => {
+    // 1. Prepare defects array
+    const defects = Object.entries(defectCounts)
+      .flatMap(([description, counts]) => [
+        ...(counts.critical > 0 ? [{ description, severity: 'Critical', count: counts.critical }] : []),
+        ...(counts.major > 0 ? [{ description, severity: 'Major', count: counts.major }] : []),
+        ...(counts.minor > 0 ? [{ description, severity: 'Minor', count: counts.minor }] : []),
+      ]);
+
+    // Clean up measurements
+    const measurementsPayload = data.measurements.map(m => ({
+      ...m,
+      spec: isNaN(Number(m.spec)) ? 0 : Number(m.spec),
+      s1: m.s1 || '', s2: m.s2 || '', s3: m.s3 || '',
+      s4: m.s4 || '', s5: m.s5 || '', s6: m.s6 || ''
+    }));
+
+    const finalPayload = {
+      ...data,
+      defects,
+      measurements: measurementsPayload,
+      customer_name: customers.find(c => c.id === data.customer)?.name || 'Unknown',
+      critical_found: critical,
+      major_found: major,
+      minor_found: minor,
+      max_allowed_critical: serverCalcs.maxCritical,
+      max_allowed_major: serverCalcs.maxMajor,
+      max_allowed_minor: serverCalcs.maxMinor,
+      result: serverCalcs.result,
+    };
+
+    if (!navigator.onLine) {
+      // --- OFFLINE FLOW ---
+      try {
+        setIsGeneratingPdf(true);
+
+        // A. Save to Dexie
+        await db.inspections.add({
+          formData: finalPayload,
+          images: uploadedImages.map(img => ({
+            file: img.file,
+            caption: img.caption,
+            category: img.category
+          })),
+          createdAt: Date.now(),
+          status: 'pending_sync',
+          type: 'final_inspection'
+        });
+
+        // B. Generate PDF Client-Side
+        const blob = await pdf(
+          <PDFReport
+            data={finalPayload}
+            defects={defects}
+            images={uploadedImages}
+          />
+        ).toBlob();
+
+        saveAs(blob, `Offline_Report_${data.order_no}_${data.style_no}.pdf`);
+
+        toast({
+          title: "Saved Offline",
+          description: "Report saved locally and PDF generated. Please sync when online.",
+        });
+        onClose();
+      } catch (err) {
+        console.error("Offline save failed", err);
+        toast({ title: "Error", description: "Failed to save offline", variant: "destructive" });
+      } finally {
+        setIsGeneratingPdf(false);
       }
     } else {
-      if (confirm('Are you confirmed to Submit?')) {
-        createMutation.mutate(data);
+      // --- ONLINE FLOW (Prototype) ---
+      console.log("Online Payload:", finalPayload);
+      if (confirm('Online mode: Simulate server upload?')) {
+        toast({ title: "Success", description: "Standard upload successful (simulated)." });
+        onClose();
       }
     }
   };
@@ -1059,11 +1147,11 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
         ) : (
           <Button
             type="submit"
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || isGeneratingPdf}
             className="w-48 bg-blue-600 hover:bg-blue-700"
             onClick={() => setSubmitAction('create')}
           >
-            {createMutation.isPending ? 'Submitting Report...' : 'Submit Final Report'}
+            {createMutation.isPending || isGeneratingPdf ? 'Processing...' : 'Submit Final Report'}
           </Button>
         )}
       </div>

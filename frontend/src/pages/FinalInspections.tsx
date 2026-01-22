@@ -4,13 +4,14 @@ import api from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Dialog, DialogContent } from '../components/ui/dialog';
+import { Card, CardContent } from '../components/ui/card';
 import { Download, Plus, Search, Pencil, Trash2, FileText } from 'lucide-react';
 import { useToast } from '../components/ui/use-toast';
 import FinalInspectionForm from '../components/FinalInspectionForm';
 import Pagination from '../components/Pagination';
 import { useAuth } from '../lib/useAuth';
+import SyncManager from '../components/SyncManager';
 
 
 interface FinalInspection {
@@ -134,11 +135,14 @@ export default function FinalInspections() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Final Inspection Reports</h1>
-        {canCreateInspections && (
-          <Button onClick={() => setIsFormOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" /> Create New FIR
-          </Button>
-        )}
+        <div className="flex items-center gap-4">
+          <SyncManager type="final_inspection" />
+          {canCreateInspections && (
+            <Button onClick={() => setIsFormOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" /> Create New FIR
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}

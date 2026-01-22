@@ -5,6 +5,10 @@ import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRigh
 import { toast } from 'sonner';
 import api from '../lib/api';
 import { useAuth } from '../lib/useAuth';
+import { db, cacheCustomers, cacheTemplates, getCachedCustomers, getCachedTemplates } from '../lib/db';
+import { pdf } from '@react-pdf/renderer';
+import { saveAs } from 'file-saver';
+import EvaluationPDFReport from '../components/EvaluationPDFReport';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -32,6 +36,7 @@ import {
     DialogTrigger,
 } from '../components/ui/dialog';
 import InspectionFilters from '../components/InspectionFilters';
+import SyncManager from '../components/SyncManager';
 
 // --- TYPE DEFINITIONS ---
 type ImageSlot = {
@@ -305,16 +310,36 @@ const Inspections = () => {
 
     const { data: customersData } = useQuery({
         queryKey: ['customers'],
-        queryFn: async () => (await api.get('/customers/')).data,
+        queryFn: async () => {
+            try {
+                const res = await api.get('/customers/');
+                const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
+                await cacheCustomers(data);
+                return data;
+            } catch (error) {
+                console.warn('API failed, using cached customers');
+                return await getCachedCustomers() || [];
+            }
+        },
     });
 
     const { data: templatesData } = useQuery({
         queryKey: ['templates'],
-        queryFn: async () => (await api.get('/templates/')).data,
+        queryFn: async () => {
+            try {
+                const res = await api.get('/templates/');
+                const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
+                await cacheTemplates(data);
+                return data;
+            } catch (error) {
+                console.warn('API failed, using cached templates');
+                return await getCachedTemplates() || [];
+            }
+        },
     });
 
-    const customers = Array.isArray(customersData) ? customersData : customersData?.results || [];
-    const templates = Array.isArray(templatesData) ? templatesData : templatesData?.results || [];
+    const customers = Array.isArray(customersData) ? customersData : [];
+    const templates = Array.isArray(templatesData) ? templatesData : [];
 
     const { data: modalSearchResults, isLoading: isSearchingModal } = useQuery({
         queryKey: ['inspectionSearch', debouncedModalSearchTerm],
@@ -457,6 +482,62 @@ const Inspections = () => {
         }
     };
 
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+    // Offline-aware submission handler
+    const handleFormSubmit = async (data: any) => {
+        const jsonPayload = {
+            ...data,
+            customer_name: customers.find((c: any) => c.id === data.customer)?.name || 'Unknown',
+            measurements: data.measurements.map((m: any) => ({
+                ...m,
+                s1: m.s1 === '' ? null : m.s1, s2: m.s2 === '' ? null : m.s2, s3: m.s3 === '' ? null : m.s3,
+                s4: m.s4 === '' ? null : m.s4, s5: m.s5 === '' ? null : m.s5, s6: m.s6 === '' ? null : m.s6,
+                std: m.std === '' ? null : m.std,
+            }))
+        };
+
+        if (!navigator.onLine) {
+            // --- OFFLINE FLOW ---
+            try {
+                setIsGeneratingPdf(true);
+
+                // A. Save to Dexie
+                await db.inspections.add({
+                    formData: jsonPayload,
+                    images: imageSlots.filter(slot => slot.file).map(slot => ({
+                        file: slot.file as Blob,
+                        caption: slot.caption,
+                        category: 'General'
+                    })),
+                    createdAt: Date.now(),
+                    status: 'pending_sync',
+                    type: 'evaluation'
+                });
+
+                // B. Generate PDF Client-Side
+                const blob = await pdf(
+                    <EvaluationPDFReport data={jsonPayload} images={imageSlots} />
+                ).toBlob();
+
+                saveAs(blob, `Offline_Evaluation_${data.style}_${data.po_number || 'Draft'}.pdf`);
+
+                toast.success("Saved Offline! PDF generated. Sync when online.");
+                setIsOpen(false);
+                reset();
+                setImageSlots([{ file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }]);
+            } catch (err) {
+                console.error("Offline save failed", err);
+                toast.error("Failed to save offline");
+            } finally {
+                setIsGeneratingPdf(false);
+            }
+        } else {
+            // --- ONLINE FLOW ---
+            createMutation.mutate(data);
+        }
+    };
+
     const createMutation = useMutation({
         mutationFn: async (data: any) => {
             const jsonPayload = {
@@ -579,433 +660,435 @@ const Inspections = () => {
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <h1 className="text-3xl font-bold text-gray-900">Evaluation</h1>
+                <div className="flex items-center gap-4">
+                    <SyncManager type="evaluation" />
+                    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+                        {canCreateInspections && (
+                            <DialogTrigger asChild>
+                                <Button><Plus className="w-4 h-4 mr-2" />New Evaluation</Button>
+                            </DialogTrigger>
+                        )}
+                        <DialogContent className="!left-0 !top-0 !right-0 !bottom-0 !translate-x-0 !translate-y-0 max-w-none !rounded-none overflow-y-auto p-0 m-0">
+                            <DialogHeader><DialogTitle>Evaluation</DialogTitle></DialogHeader>
 
-                <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                    {canCreateInspections && (
-                        <DialogTrigger asChild>
-                            <Button><Plus className="w-4 h-4 mr-2" />New Evaluation</Button>
-                        </DialogTrigger>
-                    )}
-                    <DialogContent className="!left-0 !top-0 !right-0 !bottom-0 !translate-x-0 !translate-y-0 max-w-none !rounded-none overflow-y-auto p-0 m-0">
-                        <DialogHeader><DialogTitle>Evaluation</DialogTitle></DialogHeader>
+                            <div className="space-y-6 py-4 px-6 overflow-x-hidden">
+                                {/* Search Bar */}
+                                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                    <Label className="text-blue-700 mb-2 flex items-center gap-2">
+                                        <Copy className="w-4 h-4" /> Load previous evaluation data?
+                                    </Label>
+                                    <div className="relative">
+                                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+                                        <Input
+                                            placeholder="Search by Style, PO or Customer..."
+                                            className="pl-8 bg-white"
+                                            value={modalSearchTerm}
+                                            onChange={(e) => { setModalSearchTerm(e.target.value); setShowSearchResults(true); }}
+                                        />
+                                        {isSearchingModal && <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-gray-400" />}
 
-                        <div className="space-y-6 py-4 px-6 overflow-x-hidden">
-                            {/* Search Bar */}
-                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                <Label className="text-blue-700 mb-2 flex items-center gap-2">
-                                    <Copy className="w-4 h-4" /> Load previous evaluation data?
-                                </Label>
-                                <div className="relative">
-                                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                                    <Input
-                                        placeholder="Search by Style, PO or Customer..."
-                                        className="pl-8 bg-white"
-                                        value={modalSearchTerm}
-                                        onChange={(e) => { setModalSearchTerm(e.target.value); setShowSearchResults(true); }}
-                                    />
-                                    {isSearchingModal && <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-gray-400" />}
-
-                                    {showSearchResults && debouncedModalSearchTerm && (
-                                        <div className="absolute z-50 w-full bg-white border rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto">
-                                            {modalSearchResults?.map((item: any) => (
-                                                <div key={item.id} className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm" onClick={() => handleLoadInspection(item.id)}>
-                                                    <span className="font-bold">{item.style}</span>
-                                                    <span className="mx-2 text-gray-400">|</span>
-                                                    <span>{item.po_number}</span>
-                                                    <span className="mx-2 text-gray-400">|</span>
-                                                    <span>{item.color}</span>
-                                                    <span className="mx-2 text-gray-400">|</span>
-                                                    <span className="text-blue-600 font-medium">{item.stage}</span>
-                                                    <span className="mx-2 text-gray-400">|</span>
-                                                    <span className="text-gray-500">{new Date(item.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '-')}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-6">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    <div className="space-y-2"><Label>Style</Label><Input {...register("style", { required: true })} /></div>
-                                    <div className="space-y-2"><Label>Color</Label><Input {...register("color")} /></div>
-                                    <div className="space-y-2"><Label>PO Number</Label><Input {...register("po_number")} /></div>
-                                    <div className="space-y-2">
-                                        <Label>Stage</Label>
-                                        <Select onValueChange={(v) => setValue("stage", v)} defaultValue={watch('stage')}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                {['Dev', 'Proto', 'Fit', 'SMS', 'Size Set', 'PPS', 'Shipment Sample'].map(s => (
-                                                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Customer</Label>
-                                        <Select value={watch("customer")} onValueChange={(v) => {
-                                            setValue("customer", v);
-                                            setValue("template", "");
-                                            setSelectedTemplate(null);
-                                        }}>
-                                            <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                                            <SelectContent>
-                                                {customers?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Template</Label>
-                                        <Select
-                                            value={watch("template")}
-                                            onValueChange={(v) => { setIsManualTemplateChange(true); setValue("template", v); setSelectedTemplate(v); }}
-                                            disabled={!watch("customer")}
-                                        >
-                                            <SelectTrigger><SelectValue placeholder={watch("customer") ? "Select Template..." : "Select Customer First"} /></SelectTrigger>
-                                            <SelectContent>
-                                                {templates?.filter((t: any) => t.customer === watch("customer") || !t.customer).map((t: any) => (
-                                                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-
-                                {/* Measurements Grid (6 Samples) */}
-                                <div className="space-y-2">
-                                    <Label>Measurements (Hold & Drag to Select Multiple • Delete/Backspace to Clear)</Label>
-                                    <div className="border rounded-md p-4 bg-white overflow-x-auto max-w-full">
-                                        <div className="min-w-[800px] grid grid-cols-10 gap-2 mb-2 font-medium text-xs text-gray-500 uppercase text-center">
-                                            <div className="col-span-2 text-left">POM</div>
-                                            <div className="col-span-1">Tol</div>
-                                            <div className="col-span-1">Std</div>
-                                            <div className="col-span-1">S1</div>
-                                            <div className="col-span-1">S2</div>
-                                            <div className="col-span-1">S3</div>
-                                            <div className="col-span-1">S4</div>
-                                            <div className="col-span-1">S5</div>
-                                            <div className="col-span-1">S6</div>
-                                        </div>
-                                        {fields.map((field, index) => {
-                                            const m = measurements[index] || {};
-                                            const isRed = (val: any) => checkTol(val, m.std, m.tol);
-                                            return (
-                                                <div key={field.id} className="min-w-[800px] grid grid-cols-10 gap-2 mb-2 items-center">
-                                                    <div className="col-span-2"><Input {...register(`measurements.${index}.pom_name`)} readOnly className="bg-gray-50 h-8 text-xs" /></div>
-                                                    <div className="col-span-1"><Input {...register(`measurements.${index}.tol`)} readOnly className="bg-gray-50 h-8 text-xs text-center" /></div>
-
-                                                    {/* Editable STD Field */}
-                                                    <div className="col-span-1">
-                                                        <Input
-                                                            {...register(`measurements.${index}.std`)}
-                                                            className={`h-8 text-xs text-center ${isSelected(index, 'std') ? 'bg-blue-200 ring-2 ring-blue-500' : 'bg-blue-50'}`}
-                                                            placeholder="-"
-                                                            onPaste={handleMeasurementPaste(index, 'std')}
-                                                            onKeyDown={(e) => handleCellKeyDown(e, index, 'std')}
-                                                            onMouseDown={() => handleCellMouseDown(index, 'std')}
-                                                            onMouseEnter={() => handleCellMouseEnter(index, 'std')}
-                                                            onTouchStart={() => handleTouchStart(index, 'std')}
-                                                            onTouchEnd={handleTouchEnd}
-                                                            autoComplete="off"
-                                                        />
+                                        {showSearchResults && debouncedModalSearchTerm && (
+                                            <div className="absolute z-50 w-full bg-white border rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto">
+                                                {modalSearchResults?.map((item: any) => (
+                                                    <div key={item.id} className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm" onClick={() => handleLoadInspection(item.id)}>
+                                                        <span className="font-bold">{item.style}</span>
+                                                        <span className="mx-2 text-gray-400">|</span>
+                                                        <span>{item.po_number}</span>
+                                                        <span className="mx-2 text-gray-400">|</span>
+                                                        <span>{item.color}</span>
+                                                        <span className="mx-2 text-gray-400">|</span>
+                                                        <span className="text-blue-600 font-medium">{item.stage}</span>
+                                                        <span className="mx-2 text-gray-400">|</span>
+                                                        <span className="text-gray-500">{new Date(item.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '-')}</span>
                                                     </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
-                                                    {[1, 2, 3, 4, 5, 6].map(num => {
-                                                        const key = `s${num}` as keyof Measurement;
-                                                        const selected = isSelected(index, key);
-                                                        return (
-                                                            <div key={num} className="col-span-1">
-                                                                <Input
-                                                                    type="number" step="0.1"
-                                                                    {...register(`measurements.${index}.${key}`)}
-                                                                    className={`h-8 text-center transition-colors 
+                                <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <div className="space-y-2"><Label>Style</Label><Input {...register("style", { required: true })} /></div>
+                                        <div className="space-y-2"><Label>Color</Label><Input {...register("color")} /></div>
+                                        <div className="space-y-2"><Label>PO Number</Label><Input {...register("po_number")} /></div>
+                                        <div className="space-y-2">
+                                            <Label>Stage</Label>
+                                            <Select onValueChange={(v) => setValue("stage", v)} defaultValue={watch('stage')}>
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    {['Dev', 'Proto', 'Fit', 'SMS', 'Size Set', 'PPS', 'Shipment Sample'].map(s => (
+                                                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Customer</Label>
+                                            <Select value={watch("customer")} onValueChange={(v) => {
+                                                setValue("customer", v);
+                                                setValue("template", "");
+                                                setSelectedTemplate(null);
+                                            }}>
+                                                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                                                <SelectContent>
+                                                    {customers?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Template</Label>
+                                            <Select
+                                                value={watch("template")}
+                                                onValueChange={(v) => { setIsManualTemplateChange(true); setValue("template", v); setSelectedTemplate(v); }}
+                                                disabled={!watch("customer")}
+                                            >
+                                                <SelectTrigger><SelectValue placeholder={watch("customer") ? "Select Template..." : "Select Customer First"} /></SelectTrigger>
+                                                <SelectContent>
+                                                    {templates?.filter((t: any) => t.customer === watch("customer") || !t.customer).map((t: any) => (
+                                                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+
+
+                                    {/* Measurements Grid (6 Samples) */}
+                                    <div className="space-y-2">
+                                        <Label>Measurements (Hold & Drag to Select Multiple • Delete/Backspace to Clear)</Label>
+                                        <div className="border rounded-md p-4 bg-white overflow-x-auto max-w-full">
+                                            <div className="min-w-[800px] grid grid-cols-10 gap-2 mb-2 font-medium text-xs text-gray-500 uppercase text-center">
+                                                <div className="col-span-2 text-left">POM</div>
+                                                <div className="col-span-1">Tol</div>
+                                                <div className="col-span-1">Std</div>
+                                                <div className="col-span-1">S1</div>
+                                                <div className="col-span-1">S2</div>
+                                                <div className="col-span-1">S3</div>
+                                                <div className="col-span-1">S4</div>
+                                                <div className="col-span-1">S5</div>
+                                                <div className="col-span-1">S6</div>
+                                            </div>
+                                            {fields.map((field, index) => {
+                                                const m = measurements[index] || {};
+                                                const isRed = (val: any) => checkTol(val, m.std, m.tol);
+                                                return (
+                                                    <div key={field.id} className="min-w-[800px] grid grid-cols-10 gap-2 mb-2 items-center">
+                                                        <div className="col-span-2"><Input {...register(`measurements.${index}.pom_name`)} readOnly className="bg-gray-50 h-8 text-xs" /></div>
+                                                        <div className="col-span-1"><Input {...register(`measurements.${index}.tol`)} readOnly className="bg-gray-50 h-8 text-xs text-center" /></div>
+
+                                                        {/* Editable STD Field */}
+                                                        <div className="col-span-1">
+                                                            <Input
+                                                                {...register(`measurements.${index}.std`)}
+                                                                className={`h-8 text-xs text-center ${isSelected(index, 'std') ? 'bg-blue-200 ring-2 ring-blue-500' : 'bg-blue-50'}`}
+                                                                placeholder="-"
+                                                                onPaste={handleMeasurementPaste(index, 'std')}
+                                                                onKeyDown={(e) => handleCellKeyDown(e, index, 'std')}
+                                                                onMouseDown={() => handleCellMouseDown(index, 'std')}
+                                                                onMouseEnter={() => handleCellMouseEnter(index, 'std')}
+                                                                onTouchStart={() => handleTouchStart(index, 'std')}
+                                                                onTouchEnd={handleTouchEnd}
+                                                                autoComplete="off"
+                                                            />
+                                                        </div>
+
+                                                        {[1, 2, 3, 4, 5, 6].map(num => {
+                                                            const key = `s${num}` as keyof Measurement;
+                                                            const selected = isSelected(index, key);
+                                                            return (
+                                                                <div key={num} className="col-span-1">
+                                                                    <Input
+                                                                        type="number" step="0.1"
+                                                                        {...register(`measurements.${index}.${key}`)}
+                                                                        className={`h-8 text-center transition-colors 
                                                                         ${selected ? 'bg-blue-200 ring-2 ring-blue-500 z-10 relative' : ''} 
                                                                         ${!selected && isRed((m as any)[key]) ? 'text-red-600 font-bold bg-red-50' : ''}
                                                                     `}
-                                                                    onPaste={handleMeasurementPaste(index, key)}
-                                                                    onKeyDown={(e) => handleCellKeyDown(e, index, key)}
-                                                                    onMouseDown={() => handleCellMouseDown(index, key)}
-                                                                    onMouseEnter={() => handleCellMouseEnter(index, key)}
-                                                                    onTouchStart={() => handleTouchStart(index, key)}
-                                                                    onTouchEnd={handleTouchEnd}
-                                                                    autoComplete="off"
-                                                                />
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-
-                                {/* ===== QUALITY EVALUATION SECTION ===== */}
-                                <div className="space-y-6 border p-6 rounded-lg bg-white shadow-sm">
-                                    <h3 className="text-lg font-bold text-gray-800 border-b pb-2">Quality Evaluation</h3>
-
-                                    {/* Legacy Customer Remarks (keep for old data) */}
-                                    <div className="space-y-2">
-                                        <Label className="text-sm text-gray-500">Customer Feedback Summary (General)</Label>
-                                        <Textarea {...register("customer_remarks")} className="h-16 bg-yellow-50 text-sm" placeholder="General customer feedback..." />
-                                    </div>
-
-                                    {/* FIT Section - Side by Side */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-                                        <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
-                                            <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Fit Comments</Label>
-                                            <Textarea {...register("customer_fit_comments")} className="bg-white border-yellow-200 h-14 text-sm" placeholder="Previous customer feedback..." />
-                                        </div>
-                                        <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                            <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Fit Findings</Label>
-                                            <Textarea {...register("qa_fit_comments")} className="bg-white border-blue-200 h-14 text-sm" placeholder="Enter QA findings..." />
+                                                                        onPaste={handleMeasurementPaste(index, key)}
+                                                                        onKeyDown={(e) => handleCellKeyDown(e, index, key)}
+                                                                        onMouseDown={() => handleCellMouseDown(index, key)}
+                                                                        onMouseEnter={() => handleCellMouseEnter(index, key)}
+                                                                        onTouchStart={() => handleTouchStart(index, key)}
+                                                                        onTouchEnd={handleTouchEnd}
+                                                                        autoComplete="off"
+                                                                    />
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
-                                    {/* WORKMANSHIP Section */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
-                                            <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Workmanship Comments</Label>
-                                            <Textarea {...register("customer_workmanship_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
-                                        </div>
-                                        <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                            <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Workmanship Findings</Label>
-                                            <Textarea {...register("qa_workmanship_comments")} className="bg-white border-blue-200 h-14 text-sm" />
-                                        </div>
-                                    </div>
 
-                                    {/* WASH Section */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
-                                            <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Wash Comments</Label>
-                                            <Textarea {...register("customer_wash_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
-                                        </div>
-                                        <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                            <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Wash Findings</Label>
-                                            <Textarea {...register("qa_wash_comments")} className="bg-white border-blue-200 h-14 text-sm" />
-                                        </div>
-                                    </div>
+                                    {/* ===== QUALITY EVALUATION SECTION ===== */}
+                                    <div className="space-y-6 border p-6 rounded-lg bg-white shadow-sm">
+                                        <h3 className="text-lg font-bold text-gray-800 border-b pb-2">Quality Evaluation</h3>
 
-                                    {/* FABRIC Section */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
-                                            <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Fabric Comments</Label>
-                                            <Textarea {...register("customer_fabric_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
+                                        {/* Legacy Customer Remarks (keep for old data) */}
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-500">Customer Feedback Summary (General)</Label>
+                                            <Textarea {...register("customer_remarks")} className="h-16 bg-yellow-50 text-sm" placeholder="General customer feedback..." />
                                         </div>
-                                        <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                            <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Fabric Findings</Label>
-                                            <Textarea {...register("qa_fabric_comments")} className="bg-white border-blue-200 h-14 text-sm" />
-                                        </div>
-                                    </div>
 
-                                    {/* ACCESSORIES Section */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
-                                            <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Accessories Comments</Label>
-                                            <Textarea {...register("customer_accessories_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
-                                        </div>
-                                        <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                            <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Accessories Findings</Label>
-                                            <Textarea {...register("qa_accessories_comments")} className="bg-white border-blue-200 h-14 text-sm" />
-                                        </div>
-                                    </div>
-
-                                    {/* Customer Comments Addressed Checkbox */}
-                                    <div className="flex items-center gap-3 p-3 bg-green-50 rounded-md border border-green-200">
-                                        <input
-                                            type="checkbox"
-                                            {...register("customer_comments_addressed")}
-                                            className="w-5 h-5 accent-green-600"
-                                        />
-                                        <Label className="text-green-800 font-medium cursor-pointer">
-                                            ✓ All previous customer comments have been addressed
-                                        </Label>
-                                    </div>
-                                </div>
-
-                                {/* ===== ACCESSORIES & FABRIC SECTION ===== */}
-                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                                    {/* Dynamic Accessories Checklist (2 columns) */}
-                                    <div className="lg:col-span-2 border p-4 rounded-lg bg-gray-50">
-                                        <div className="flex justify-between items-center mb-4">
-                                            <Label className="text-base font-bold">Accessories Checklist</Label>
-                                            <div className="flex gap-2">
-                                                <Select onValueChange={(val) => appendAcc({ name: val, status: 'OK', comment: '' })}>
-                                                    <SelectTrigger className="w-[140px] h-8 text-xs bg-white">
-                                                        <SelectValue placeholder="+ Add Preset" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {ACCESSORY_PRESETS.map(preset => (
-                                                            <SelectItem key={preset} value={preset}>{preset}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => appendAcc({ name: '', status: 'OK', comment: '' })}
-                                                    className="bg-white hover:bg-gray-100 h-8"
-                                                >
-                                                    <Plus className="w-3 h-3 mr-1" /> Custom
-                                                </Button>
+                                        {/* FIT Section - Side by Side */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                                            <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
+                                                <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Fit Comments</Label>
+                                                <Textarea {...register("customer_fit_comments")} className="bg-white border-yellow-200 h-14 text-sm" placeholder="Previous customer feedback..." />
+                                            </div>
+                                            <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
+                                                <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Fit Findings</Label>
+                                                <Textarea {...register("qa_fit_comments")} className="bg-white border-blue-200 h-14 text-sm" placeholder="Enter QA findings..." />
                                             </div>
                                         </div>
 
-                                        <div className="space-y-2 max-h-60 overflow-y-auto">
-                                            {accFields.map((field, index) => (
-                                                <div key={field.id} className="flex gap-2 items-start bg-white p-2 rounded border">
-                                                    <Input
-                                                        {...register(`accessories_data.${index}.name`)}
-                                                        placeholder="Item name"
-                                                        className="w-1/4 h-8 text-sm"
-                                                    />
-                                                    <Select
-                                                        value={watch(`accessories_data.${index}.status`)}
-                                                        onValueChange={(val) => setValue(`accessories_data.${index}.status`, val as any)}
+                                        {/* WORKMANSHIP Section */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
+                                                <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Workmanship Comments</Label>
+                                                <Textarea {...register("customer_workmanship_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
+                                            </div>
+                                            <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
+                                                <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Workmanship Findings</Label>
+                                                <Textarea {...register("qa_workmanship_comments")} className="bg-white border-blue-200 h-14 text-sm" />
+                                            </div>
+                                        </div>
+
+                                        {/* WASH Section */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
+                                                <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Wash Comments</Label>
+                                                <Textarea {...register("customer_wash_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
+                                            </div>
+                                            <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
+                                                <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Wash Findings</Label>
+                                                <Textarea {...register("qa_wash_comments")} className="bg-white border-blue-200 h-14 text-sm" />
+                                            </div>
+                                        </div>
+
+                                        {/* FABRIC Section */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
+                                                <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Fabric Comments</Label>
+                                                <Textarea {...register("customer_fabric_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
+                                            </div>
+                                            <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
+                                                <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Fabric Findings</Label>
+                                                <Textarea {...register("qa_fabric_comments")} className="bg-white border-blue-200 h-14 text-sm" />
+                                            </div>
+                                        </div>
+
+                                        {/* ACCESSORIES Section */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="bg-yellow-50 p-3 rounded-md border border-yellow-100">
+                                                <Label className="text-yellow-800 font-semibold text-sm mb-1 block">Customer Accessories Comments</Label>
+                                                <Textarea {...register("customer_accessories_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
+                                            </div>
+                                            <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
+                                                <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Accessories Findings</Label>
+                                                <Textarea {...register("qa_accessories_comments")} className="bg-white border-blue-200 h-14 text-sm" />
+                                            </div>
+                                        </div>
+
+                                        {/* Customer Comments Addressed Checkbox */}
+                                        <div className="flex items-center gap-3 p-3 bg-green-50 rounded-md border border-green-200">
+                                            <input
+                                                type="checkbox"
+                                                {...register("customer_comments_addressed")}
+                                                className="w-5 h-5 accent-green-600"
+                                            />
+                                            <Label className="text-green-800 font-medium cursor-pointer">
+                                                ✓ All previous customer comments have been addressed
+                                            </Label>
+                                        </div>
+                                    </div>
+
+                                    {/* ===== ACCESSORIES & FABRIC SECTION ===== */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                                        {/* Dynamic Accessories Checklist (2 columns) */}
+                                        <div className="lg:col-span-2 border p-4 rounded-lg bg-gray-50">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <Label className="text-base font-bold">Accessories Checklist</Label>
+                                                <div className="flex gap-2">
+                                                    <Select onValueChange={(val) => appendAcc({ name: val, status: 'OK', comment: '' })}>
+                                                        <SelectTrigger className="w-[140px] h-8 text-xs bg-white">
+                                                            <SelectValue placeholder="+ Add Preset" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {ACCESSORY_PRESETS.map(preset => (
+                                                                <SelectItem key={preset} value={preset}>{preset}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => appendAcc({ name: '', status: 'OK', comment: '' })}
+                                                        className="bg-white hover:bg-gray-100 h-8"
                                                     >
-                                                        <SelectTrigger className={`w-24 h-8 text-xs font-medium ${watch(`accessories_data.${index}.status`) === 'Not OK' ? 'text-red-600 bg-red-50' :
-                                                            watch(`accessories_data.${index}.status`) === 'N/A' ? 'text-gray-400' : 'text-green-600 bg-green-50'
+                                                        <Plus className="w-3 h-3 mr-1" /> Custom
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                                                {accFields.map((field, index) => (
+                                                    <div key={field.id} className="flex gap-2 items-start bg-white p-2 rounded border">
+                                                        <Input
+                                                            {...register(`accessories_data.${index}.name`)}
+                                                            placeholder="Item name"
+                                                            className="w-1/4 h-8 text-sm"
+                                                        />
+                                                        <Select
+                                                            value={watch(`accessories_data.${index}.status`)}
+                                                            onValueChange={(val) => setValue(`accessories_data.${index}.status`, val as any)}
+                                                        >
+                                                            <SelectTrigger className={`w-24 h-8 text-xs font-medium ${watch(`accessories_data.${index}.status`) === 'Not OK' ? 'text-red-600 bg-red-50' :
+                                                                watch(`accessories_data.${index}.status`) === 'N/A' ? 'text-gray-400' : 'text-green-600 bg-green-50'
+                                                                }`}>
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="OK">OK</SelectItem>
+                                                                <SelectItem value="Not OK">Not OK</SelectItem>
+                                                                <SelectItem value="N/A">N/A</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Input
+                                                            {...register(`accessories_data.${index}.comment`)}
+                                                            placeholder="Remarks..."
+                                                            className="flex-1 h-8 text-sm"
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => removeAcc(index)}
+                                                            className="text-red-500 hover:bg-red-50 h-8 w-8"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                ))}
+
+                                                {accFields.length === 0 && (
+                                                    <div className="text-center py-6 text-gray-400 border-2 border-dashed rounded-md text-sm">
+                                                        No accessories added. Use presets or click "Custom" to add items.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Fabric Check Panel (1 column) */}
+                                        <div className="border p-4 rounded-lg bg-white h-fit">
+                                            <Label className="text-base font-bold mb-4 block">Fabric Check</Label>
+
+                                            <div className="space-y-5">
+                                                {/* Handfeel Radio */}
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm text-gray-600">Handfeel</Label>
+                                                    <div className="flex gap-3">
+                                                        <label className={`flex items-center gap-2 cursor-pointer border p-2 rounded-md flex-1 transition-all ${watch('fabric_handfeel') === 'OK' ? 'bg-green-50 border-green-300' : 'hover:bg-gray-50'
+                                                            }`}>
+                                                            <input
+                                                                type="radio"
+                                                                value="OK"
+                                                                {...register('fabric_handfeel')}
+                                                                className="accent-green-600 w-4 h-4"
+                                                            />
+                                                            <span className="text-sm font-medium">OK</span>
+                                                        </label>
+                                                        <label className={`flex items-center gap-2 cursor-pointer border p-2 rounded-md flex-1 transition-all ${watch('fabric_handfeel') === 'Not OK' ? 'bg-red-50 border-red-300' : 'hover:bg-gray-50'
+                                                            }`}>
+                                                            <input
+                                                                type="radio"
+                                                                value="Not OK"
+                                                                {...register('fabric_handfeel')}
+                                                                className="accent-red-600 w-4 h-4"
+                                                            />
+                                                            <span className="text-sm font-medium">Not OK</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                {/* Pilling Select */}
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm text-gray-600">Pilling</Label>
+                                                    <Select
+                                                        value={watch('fabric_pilling')}
+                                                        onValueChange={(val) => setValue('fabric_pilling', val)}
+                                                    >
+                                                        <SelectTrigger className={`w-full ${watch('fabric_pilling') === 'High' ? 'text-red-600 bg-red-50' :
+                                                            watch('fabric_pilling') === 'Low' ? 'text-orange-600 bg-orange-50' : 'text-green-600 bg-green-50'
                                                             }`}>
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            <SelectItem value="OK">OK</SelectItem>
-                                                            <SelectItem value="Not OK">Not OK</SelectItem>
-                                                            <SelectItem value="N/A">N/A</SelectItem>
+                                                            <SelectItem value="None">None (Good)</SelectItem>
+                                                            <SelectItem value="Low">Low (Acceptable)</SelectItem>
+                                                            <SelectItem value="High">High (Reject)</SelectItem>
                                                         </SelectContent>
                                                     </Select>
-                                                    <Input
-                                                        {...register(`accessories_data.${index}.comment`)}
-                                                        placeholder="Remarks..."
-                                                        className="flex-1 h-8 text-sm"
-                                                    />
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => removeAcc(index)}
-                                                        className="text-red-500 hover:bg-red-50 h-8 w-8"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Final Remarks */}
+                                    <div className="space-y-2">
+                                        <Label>QA Final Remarks</Label>
+                                        <Textarea {...register("remarks")} className="h-20" placeholder="General remarks..." />
+                                    </div>
+
+                                    {/* Images */}
+                                    <div className="space-y-2">
+                                        <Label>Images (Max 4)</Label>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {imageSlots.map((slot, idx) => (
+                                                <div key={idx} className="border p-3 rounded-md space-y-2 bg-gray-50">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-bold bg-white border px-2 py-1 rounded">#{idx + 1}</span>
+                                                        <Input type="file" accept="image/*" capture="environment" className="text-xs bg-white" onChange={(e) => handleImageChange(idx, e.target.files ? e.target.files[0] : null)} />
+                                                    </div>
+                                                    <Input placeholder="Caption" value={slot.caption} onChange={(e) => handleCaptionChange(idx, e.target.value)} className="h-8 text-sm bg-white" />
                                                 </div>
                                             ))}
-
-                                            {accFields.length === 0 && (
-                                                <div className="text-center py-6 text-gray-400 border-2 border-dashed rounded-md text-sm">
-                                                    No accessories added. Use presets or click "Custom" to add items.
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
 
-                                    {/* Fabric Check Panel (1 column) */}
-                                    <div className="border p-4 rounded-lg bg-white h-fit">
-                                        <Label className="text-base font-bold mb-4 block">Fabric Check</Label>
-
-                                        <div className="space-y-5">
-                                            {/* Handfeel Radio */}
-                                            <div className="space-y-2">
-                                                <Label className="text-sm text-gray-600">Handfeel</Label>
-                                                <div className="flex gap-3">
-                                                    <label className={`flex items-center gap-2 cursor-pointer border p-2 rounded-md flex-1 transition-all ${watch('fabric_handfeel') === 'OK' ? 'bg-green-50 border-green-300' : 'hover:bg-gray-50'
-                                                        }`}>
-                                                        <input
-                                                            type="radio"
-                                                            value="OK"
-                                                            {...register('fabric_handfeel')}
-                                                            className="accent-green-600 w-4 h-4"
-                                                        />
-                                                        <span className="text-sm font-medium">OK</span>
-                                                    </label>
-                                                    <label className={`flex items-center gap-2 cursor-pointer border p-2 rounded-md flex-1 transition-all ${watch('fabric_handfeel') === 'Not OK' ? 'bg-red-50 border-red-300' : 'hover:bg-gray-50'
-                                                        }`}>
-                                                        <input
-                                                            type="radio"
-                                                            value="Not OK"
-                                                            {...register('fabric_handfeel')}
-                                                            className="accent-red-600 w-4 h-4"
-                                                        />
-                                                        <span className="text-sm font-medium">Not OK</span>
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            {/* Pilling Select */}
-                                            <div className="space-y-2">
-                                                <Label className="text-sm text-gray-600">Pilling</Label>
-                                                <Select
-                                                    value={watch('fabric_pilling')}
-                                                    onValueChange={(val) => setValue('fabric_pilling', val)}
-                                                >
-                                                    <SelectTrigger className={`w-full ${watch('fabric_pilling') === 'High' ? 'text-red-600 bg-red-50' :
-                                                        watch('fabric_pilling') === 'Low' ? 'text-orange-600 bg-orange-50' : 'text-green-600 bg-green-50'
-                                                        }`}>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="None">None (Good)</SelectItem>
-                                                        <SelectItem value="Low">Low (Acceptable)</SelectItem>
-                                                        <SelectItem value="High">High (Reject)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Final Remarks */}
-                                <div className="space-y-2">
-                                    <Label>QA Final Remarks</Label>
-                                    <Textarea {...register("remarks")} className="h-20" placeholder="General remarks..." />
-                                </div>
-
-                                {/* Images */}
-                                <div className="space-y-2">
-                                    <Label>Images (Max 4)</Label>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {imageSlots.map((slot, idx) => (
-                                            <div key={idx} className="border p-3 rounded-md space-y-2 bg-gray-50">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold bg-white border px-2 py-1 rounded">#{idx + 1}</span>
-                                                    <Input type="file" accept="image/*" capture="environment" className="text-xs bg-white" onChange={(e) => handleImageChange(idx, e.target.files ? e.target.files[0] : null)} />
-                                                </div>
-                                                <Input placeholder="Caption" value={slot.caption} onChange={(e) => handleCaptionChange(idx, e.target.value)} className="h-8 text-sm bg-white" />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Decision */}
-                                <div className="space-y-2">
-                                    <Label>Overall Decision</Label>
-                                    <div className="flex gap-4">
-                                        {['Accepted', 'Rejected', 'Represent'].map((status) => (
-                                            <div
-                                                key={status}
-                                                className={`cursor-pointer px-4 py-2 rounded-md border font-bold text-sm transition-all
+                                    {/* Decision */}
+                                    <div className="space-y-2">
+                                        <Label>Overall Decision</Label>
+                                        <div className="flex gap-4">
+                                            {['Accepted', 'Rejected', 'Represent'].map((status) => (
+                                                <div
+                                                    key={status}
+                                                    className={`cursor-pointer px-4 py-2 rounded-md border font-bold text-sm transition-all
                                                     ${watch('decision') === status
-                                                        ? (status === 'Accepted' ? 'bg-green-600 text-white border-green-700' : status === 'Rejected' ? 'bg-red-600 text-white border-red-700' : 'bg-orange-500 text-white border-orange-700')
-                                                        : 'bg-white text-gray-600 hover:bg-gray-50'
-                                                    }`}
-                                                onClick={() => setValue('decision', status)}
-                                            >
-                                                {status}
-                                            </div>
-                                        ))}
+                                                            ? (status === 'Accepted' ? 'bg-green-600 text-white border-green-700' : status === 'Rejected' ? 'bg-red-600 text-white border-red-700' : 'bg-orange-500 text-white border-orange-700')
+                                                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                                                        }`}
+                                                    onClick={() => setValue('decision', status)}
+                                                >
+                                                    {status}
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
 
-                                <Button type="submit" className="w-full h-12 text-lg" disabled={createMutation.isPending}>
-                                    {createMutation.isPending ? 'Saving...' : 'Save Evaluation'}
-                                </Button>
-                            </form>
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                                    <Button type="submit" className="w-full h-12 text-lg" disabled={createMutation.isPending}>
+                                        {createMutation.isPending ? 'Saving...' : 'Save Evaluation'}
+                                    </Button>
+                                </form>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+                </div>
             </div>
 
             {/* Main List */}
@@ -1085,7 +1168,7 @@ const Inspections = () => {
                     </div>
                 </div>
             </div>
-        </div >
+        </div>
     );
 };
 
