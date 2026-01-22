@@ -1,0 +1,77 @@
+from .settings import *
+import os
+from django.core.exceptions import ImproperlyConfigured
+
+
+def get_required_env(var_name):
+    """
+    Get a required environment variable or raise an error.
+    
+    In production, the app should fail fast if critical config is missing,
+    rather than silently using insecure defaults.
+    """
+    value = os.environ.get(var_name)
+    if not value:
+        raise ImproperlyConfigured(
+            f"Required environment variable '{var_name}' is not set. "
+            f"Set this variable before starting the production server."
+        )
+    return value
+
+
+# SECURITY WARNING: keep the secret key used in production secret!
+# App will crash on startup if not set - this is intentional for security
+SECRET_KEY = get_required_env('SECRET_KEY')
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = False
+
+ALLOWED_HOSTS = [
+    '.run.app',  # Google Cloud Run
+    'localhost',
+    '127.0.0.1',
+]
+
+# Database - Aiven PostgreSQL
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'HOST': get_required_env('DB_HOST'),
+        'PORT': os.environ.get('DB_PORT', 5432),
+        'NAME': get_required_env('DB_NAME'),
+        'USER': get_required_env('DB_USER'),
+        'PASSWORD': get_required_env('DB_PASSWORD'),
+        'OPTIONS': {
+            'sslmode': 'require',
+        }
+    }
+}
+
+
+# Static files with WhiteNoise
+MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Media files - Google Cloud Storage
+DEFAULT_FILE_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
+GS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', 'fitflow-media')
+GS_PROJECT_ID = os.environ.get('GCP_PROJECT_ID')
+
+# CORS for frontend
+CORS_ALLOWED_ORIGINS = [
+    'https://storage.googleapis.com',
+    # Add your frontend domain after deployment
+]
+
+# CSRF
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.run.app',
+]
+
+# Security
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True

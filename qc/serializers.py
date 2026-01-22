@@ -1,0 +1,310 @@
+# qc/serializers.py
+from rest_framework import serializers
+from .models import (
+    Customer, CustomerEmail, Template, TemplatePOM, Inspection, Measurement, InspectionImage, FilterPreset,
+    FinalInspection, FinalInspectionDefect, FinalInspectionSizeCheck, FinalInspectionImage,
+    FinalInspectionMeasurement
+)
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.utils import timezone
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data['username'] = self.user.username
+        data['is_superuser'] = self.user.is_superuser
+        # Include user_type from profile (default to 'qa' if no profile)
+        try:
+            data['user_type'] = self.user.profile.user_type
+        except:
+            data['user_type'] = 'qa'
+        return data
+
+class CustomerEmailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomerEmail
+        fields = ["id", "contact_name", "email", "email_type"]
+
+class CustomerSerializer(serializers.ModelSerializer):
+    emails = CustomerEmailSerializer(many=True, read_only=True)
+    class Meta:
+        model = Customer
+        fields = ["id", "name", "created_at", "emails"]
+
+class TemplatePOMSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TemplatePOM
+        fields = ["id", "name", "default_tol", "default_std", "order"]
+
+class TemplateSerializer(serializers.ModelSerializer):
+    poms = TemplatePOMSerializer(many=True)
+    class Meta:
+        model = Template
+        fields = ["id", "name", "description", "created_at", "poms", "customer"]
+
+    def create(self, validated_data):
+        poms_data = validated_data.pop("poms", [])
+        template = Template.objects.create(**validated_data)
+        for i, pom in enumerate(poms_data):
+            TemplatePOM.objects.create(template=template, order=i, **pom)
+        return template
+
+    def update(self, instance, validated_data):
+        poms_data = validated_data.pop("poms", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if poms_data is not None:
+            instance.poms.all().delete()
+            for i, pom in enumerate(poms_data):
+                TemplatePOM.objects.create(
+                    template=instance,
+                    order=i,
+                    name=pom.get('name', ''),
+                    default_tol=pom.get('default_tol', 0.0),
+                    default_std=pom.get('default_std', None),
+                )
+        return instance
+
+class MeasurementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Measurement
+        fields = ["id","pom_name","tol","std","s1","s2","s3","s4","s5","s6","status"]
+
+class InspectionImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InspectionImage
+        fields = ["id","caption","image","uploaded_at"]
+
+class InspectionListSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    class Meta:
+        model = Inspection
+        fields = [
+            "id","style","color","po_number","stage","template","customer",
+            "remarks","decision","created_at", "created_by_username",
+            "customer_decision", "customer_feedback_comments", "customer_feedback_date"
+        ]
+
+class InspectionCopySerializer(serializers.ModelSerializer):
+    measurements = MeasurementSerializer(many=True, read_only=True)
+    class Meta:
+        model = Inspection
+        fields = [
+            "id","style","color","po_number","stage","template","customer",
+            # Customer Comments by Category
+            "customer_remarks", "customer_fit_comments", "customer_workmanship_comments",
+            "customer_wash_comments", "customer_fabric_comments", "customer_accessories_comments",
+            "customer_comments_addressed",
+            # QA Comments by Category
+            "qa_fit_comments", "qa_workmanship_comments", 
+            "qa_wash_comments", "qa_fabric_comments", "qa_accessories_comments",
+            # Fabric Checks
+            "fabric_handfeel", "fabric_pilling",
+            # Dynamic Accessories
+            "accessories_data",
+            # General
+            "remarks","decision","created_at","measurements",
+            "customer_decision", "customer_feedback_comments", "customer_feedback_date"
+        ]
+
+class InspectionSerializer(serializers.ModelSerializer):
+    measurements = MeasurementSerializer(many=True)
+    images = InspectionImageSerializer(many=True, read_only=True)
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+
+    class Meta:
+        model = Inspection
+        fields = [
+            "id","style","color","po_number","stage","template","customer",
+            # Customer Comments by Category
+            "customer_remarks", "customer_fit_comments", "customer_workmanship_comments",
+            "customer_wash_comments", "customer_fabric_comments", "customer_accessories_comments",
+            "customer_comments_addressed",
+            # QA Comments by Category
+            "qa_fit_comments", "qa_workmanship_comments", 
+            "qa_wash_comments", "qa_fabric_comments", "qa_accessories_comments",
+            # Fabric Checks
+            "fabric_handfeel", "fabric_pilling",
+            # Dynamic Accessories
+            "accessories_data",
+            # General
+            "remarks","decision","created_at","measurements","images",
+            "created_by_username",
+            "customer_decision", "customer_feedback_comments", "customer_feedback_date"
+        ]
+
+    def create(self, validated_data):
+        measurements_data = validated_data.pop("measurements", [])
+        inspection = Inspection.objects.create(**validated_data)
+        for m in measurements_data:
+            Measurement.objects.create(inspection=inspection, **m)
+        return inspection
+
+    def update(self, instance, validated_data):
+        measurements_data = validated_data.pop("measurements", None)
+        
+        # Update feedback date if feedback is provided
+        if 'customer_decision' in validated_data or 'customer_feedback_comments' in validated_data:
+            instance.customer_feedback_date = timezone.now()
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if measurements_data is not None:
+            instance.measurements.all().delete()
+            for m in measurements_data:
+                Measurement.objects.create(inspection=instance, **m)
+        return instance
+
+class FilterPresetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FilterPreset
+        fields = ["id", "name", "description", "filters", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+# ==================== Final Inspection Serializers ====================
+class FinalInspectionMeasurementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FinalInspectionMeasurement
+        fields = ['id', 'pom_name', 'tol', 'spec', 'size_name', 's1', 's2', 's3', 's4', 's5', 's6']
+
+class FinalInspectionDefectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FinalInspectionDefect
+        fields = ['id', 'description', 'severity', 'count', 'photo']
+
+
+class FinalInspectionSizeCheckSerializer(serializers.ModelSerializer):
+    difference = serializers.ReadOnlyField()
+    deviation_percent = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = FinalInspectionSizeCheck
+        fields = ['id', 'size', 'order_qty', 'packed_qty', 'difference', 'deviation_percent']
+
+
+class FinalInspectionImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FinalInspectionImage
+        fields = ['id', 'image', 'caption', 'category', 'order', 'uploaded_at']
+
+
+class FinalInspectionListSerializer(serializers.ModelSerializer):
+    """Minimal serializer for list views."""
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    
+    class Meta:
+        model = FinalInspection
+        fields = [
+            'id', 'order_no', 'style_no', 'color', 'inspection_attempt', 'customer', 'customer_name',
+            'inspection_date', 'result', 'total_order_qty', 'sample_size',
+            'created_at', 'created_by_username'
+        ]
+
+
+class FinalInspectionSerializer(serializers.ModelSerializer):
+    """Full serializer with nested relationships."""
+    defects = FinalInspectionDefectSerializer(many=True, required=False)
+    size_checks = FinalInspectionSizeCheckSerializer(many=True, required=False)
+    measurements = FinalInspectionMeasurementSerializer(many=True, required=False)
+    images = FinalInspectionImageSerializer(many=True, read_only=True)
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    
+    # Read-only calculated fields
+    max_allowed_critical = serializers.ReadOnlyField()
+    max_allowed_major = serializers.ReadOnlyField()
+    max_allowed_minor = serializers.ReadOnlyField()
+    result = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = FinalInspection
+        fields = [
+            'id', 'customer', 'customer_name', 'supplier', 'factory',
+            'inspection_date', 'order_no', 'style_no', 'color', 'inspection_attempt',
+            'total_order_qty', 'presented_qty', 'sample_size',
+            'aql_standard', 'aql_critical', 'aql_major', 'aql_minor',
+            'critical_found', 'major_found', 'minor_found',
+            'max_allowed_critical', 'max_allowed_major', 'max_allowed_minor',
+            'result', 'total_cartons', 'selected_cartons',
+            'carton_length', 'carton_width', 'carton_height',
+            'gross_weight', 'net_weight',
+            'quantity_check', 'workmanship', 'packing_method',
+            'marking_label', 'data_measurement', 'hand_feel',
+            'remarks', 'created_at', 'created_by', 'created_by_username',
+            'defects', 'size_checks', 'images', 'measurements'
+        ]
+    
+    def create(self, validated_data):
+        """Create FinalInspection with nested defects and size_checks."""
+        defects_data = validated_data.pop('defects', [])
+        size_checks_data = validated_data.pop('size_checks', [])
+        measurements_data = validated_data.pop('measurements', [])
+        
+        # Create the main inspection
+        final_inspection = FinalInspection.objects.create(**validated_data)
+        
+        # Create nested defects
+        for defect_data in defects_data:
+            FinalInspectionDefect.objects.create(
+                final_inspection=final_inspection,
+                **defect_data
+            )
+        
+        # Create nested size checks
+        for size_check_data in size_checks_data:
+            FinalInspectionSizeCheck.objects.create(
+                final_inspection=final_inspection,
+                **size_check_data
+            )
+
+        # Create nested measurements
+        for measurement_data in measurements_data:
+            FinalInspectionMeasurement.objects.create(
+                final_inspection=final_inspection,
+                **measurement_data
+            )
+        
+        return final_inspection
+    
+    def update(self, instance, validated_data):
+        """Update FinalInspection with nested defects and size_checks."""
+        defects_data = validated_data.pop('defects', None)
+        size_checks_data = validated_data.pop('size_checks', None)
+        measurements_data = validated_data.pop('measurements', None)
+        
+        # Update main fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update defects if provided
+        if defects_data is not None:
+            instance.defects.all().delete()
+            for defect_data in defects_data:
+                FinalInspectionDefect.objects.create(
+                    final_inspection=instance,
+                    **defect_data
+                )
+        
+        # Update size checks if provided
+        if size_checks_data is not None:
+            instance.size_checks.all().delete()
+            for size_check_data in size_checks_data:
+                FinalInspectionSizeCheck.objects.create(
+                    final_inspection=instance,
+                    **size_check_data
+                )
+
+        # Update measurements if provided
+        if measurements_data is not None:
+            instance.measurements.all().delete()
+            for measurement_data in measurements_data:
+                FinalInspectionMeasurement.objects.create(
+                    final_inspection=instance,
+                    **measurement_data
+                )
+        
+        return instance

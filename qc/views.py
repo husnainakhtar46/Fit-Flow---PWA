@@ -1,0 +1,495 @@
+from rest_framework import viewsets, status, filters
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.views import TokenObtainPairView
+from django_filters.rest_framework import DjangoFilterBackend
+from django.core.mail import EmailMessage
+from django.conf import settings
+from django.http import FileResponse
+import io
+from PIL import Image as PILImage
+from .models import Customer, CustomerEmail, Template, Inspection, InspectionImage, Measurement, FilterPreset
+from .serializers import (
+    CustomerSerializer, CustomerEmailSerializer, TemplateSerializer, 
+    InspectionSerializer, InspectionListSerializer, CustomTokenObtainPairSerializer,
+    InspectionCopySerializer, FilterPresetSerializer
+)
+from django.db.models import Prefetch
+from .filters import InspectionFilter
+from .services.pdf_generator import generate_pdf_buffer, generate_final_inspection_pdf
+from .permissions import CanEditEvaluation, CanEditFinalInspection, CanCreateInspection, CanAddCustomerFeedback, IsQualityHeadOrAdmin
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+
+class InspectionViewSet(viewsets.ModelViewSet):
+    """ViewSet for Evaluation/Inspection reports with role-based permissions."""
+    queryset = Inspection.objects.all()
+    serializer_class = InspectionSerializer
+    permission_classes = [CanEditEvaluation]
+    
+    # Use django-filter for advanced filtering + ordering
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = InspectionFilter
+    ordering_fields = ['created_at', 'style', 'decision', 'stage']
+    ordering = ['-created_at'] 
+
+    def get_queryset(self):
+        queryset = Inspection.objects.select_related('customer', 'template', 'created_by').order_by("-created_at")
+        if self.action != 'list' or self.action == 'retrieve':
+            queryset = queryset.prefetch_related(
+                'measurements', 
+                Prefetch('images', queryset=InspectionImage.objects.only('id', 'caption'))
+            )
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return InspectionListSerializer
+        if self.action == 'retrieve':
+            return InspectionCopySerializer
+        return InspectionSerializer
+
+    def perform_create(self, serializer):
+        # Save the user who created this report
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["get"])
+    def pdf(self, request, pk=None):
+        inspection = self.get_object()
+        buffer = generate_pdf_buffer(inspection)
+        return FileResponse(buffer, filename=f"{inspection.style}_Report.pdf", content_type="application/pdf")
+
+    @action(detail=True, methods=["post"])
+    def upload_image(self, request, pk=None):
+        inspection = self.get_object()
+        image_file = request.FILES.get("image")
+        caption = request.data.get("caption", "Inspection Image")
+        
+        if not image_file:
+            return Response({"error": "No image provided"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Open and compress the image
+            with PILImage.open(image_file) as img:
+                # Convert RGBA/P to RGB for WebP compatibility
+                if img.mode in ("RGBA", "P", "LA"):
+                    # Create white background for transparency
+                    rgb_img = PILImage.new("RGB", img.size, (255, 255, 255))
+                    if img.mode == "P":
+                        img = img.convert("RGBA")
+                    rgb_img.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+                    img = rgb_img
+                elif img.mode != "RGB":
+                    img = img.convert("RGB")
+                
+                # Resize to max 1600x1600 (maintains aspect ratio)
+                img.thumbnail((1600, 1600), PILImage.Resampling.LANCZOS)
+                
+                # Save as WebP with quality 85
+                compressed_buffer = io.BytesIO()
+                img.save(compressed_buffer, format='WEBP', quality=85, method=6)
+                compressed_buffer.seek(0)
+                
+                # Create filename with .webp extension
+                original_name = image_file.name.rsplit('.', 1)[0] if '.' in image_file.name else image_file.name
+                webp_filename = f"{original_name}.webp"
+                
+                # Create Django File object
+                from django.core.files.base import ContentFile
+                compressed_file = ContentFile(compressed_buffer.read(), name=webp_filename)
+                
+                InspectionImage.objects.create(
+                    inspection=inspection,
+                    image=compressed_file,
+                    caption=caption
+                )
+                return Response({"status": "Image uploaded and compressed"}, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            return Response({"error": f"Image processing failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"])
+    def send_email(self, request, pk=None):
+        inspection = self.get_object()
+        
+        # Separate emails by type (To/CC)
+        if inspection.customer:
+            to_emails = list(inspection.customer.emails.filter(email_type='to').values_list('email', flat=True))
+            cc_emails = list(inspection.customer.emails.filter(email_type='cc').values_list('email', flat=True))
+        else:
+            to_emails = []
+            cc_emails = []
+            
+        if not to_emails:
+             return Response({"error": "No 'To' recipients found. Add at least one 'To' email to the Customer first."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Updated Subject and Body
+        date_str = inspection.created_at.strftime('%Y-%m-%d')
+        subject = f"{inspection.customer.name if inspection.customer else 'N/A'} - PO: {inspection.po_number} - Style: {inspection.style} - Color: {inspection.color or 'N/A'} - {date_str} - Decision: {inspection.decision}"
+        
+        body = (
+            f"Dear Team,\n\n"
+            f"Please find attached the sample evaluation report against the titled style.\n\n"
+            f"Style: {inspection.style}\n"
+            f"PO Number: {inspection.po_number}\n"
+            f"Stage: {inspection.stage}\n"
+            f"Decision: {inspection.decision}\n\n"
+            f"Thank you."
+        )
+        
+        buffer = generate_pdf_buffer(inspection)
+        email = EmailMessage(subject, body, settings.EMAIL_HOST_USER, to_emails, cc=cc_emails if cc_emails else None)
+        email.attach(f"{inspection.style}_{inspection.po_number}_Report.pdf", buffer.getvalue(), "application/pdf")
+        email.send(fail_silently=False)
+        return Response({"sent": True, "to": to_emails, "cc": cc_emails})
+
+    @action(detail=True, methods=["patch"], permission_classes=[CanAddCustomerFeedback])
+    def update_customer_feedback(self, request, pk=None):
+        """
+        Update customer feedback fields only.
+        Only merchandisers and admin can use this.
+        """
+        from django.utils import timezone
+        inspection = self.get_object()
+        
+        # Only allow updating feedback-specific fields
+        allowed_fields = ['customer_decision', 'customer_feedback_comments']
+        data = {k: v for k, v in request.data.items() if k in allowed_fields}
+        
+        if not data:
+            return Response({"error": "No valid feedback fields provided"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update the fields
+        for field, value in data.items():
+            setattr(inspection, field, value)
+        
+        # Auto-set feedback date
+        inspection.customer_feedback_date = timezone.now().date()
+        inspection.save()
+        
+        return Response({
+            "id": str(inspection.id),
+            "customer_decision": inspection.customer_decision,
+            "customer_feedback_comments": inspection.customer_feedback_comments,
+            "customer_feedback_date": str(inspection.customer_feedback_date),
+        })
+
+class CustomerViewSet(viewsets.ModelViewSet):
+    """ViewSet for Customer management - Quality Head/Admin only."""
+    queryset = Customer.objects.all()
+    serializer_class = CustomerSerializer
+    permission_classes = [IsQualityHeadOrAdmin]
+    
+    @action(detail=True, methods=["post"])
+    def add_email(self, request, pk=None):
+        customer = self.get_object()
+        serializer = CustomerEmailSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(customer=customer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class TemplateViewSet(viewsets.ModelViewSet):
+    queryset = Template.objects.all()
+    serializer_class = TemplateSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'customer__name']
+
+    def get_queryset(self):
+        queryset = Template.objects.all()
+        customer_id = self.request.query_params.get('customer')
+        if customer_id:
+            queryset = queryset.filter(customer_id=customer_id)
+        return queryset
+
+
+class FilterPresetViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing user filter presets"""
+    serializer_class = FilterPresetSerializer
+    
+    def get_queryset(self):
+        # Only return presets for the current user
+        return FilterPreset.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        # Auto-assign the current user when creating a preset
+        serializer.save(user=self.request.user)
+
+from django.db.models import Count, Q
+from django.db.models.functions import TruncMonth
+
+class DashboardView(APIView):
+    def get(self, request):
+        # Parse optional date range filters
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        
+        # ==================== EVALUATION ANALYTICS ====================
+        # Base queryset with date filtering
+        eval_qs = Inspection.objects.all()
+        if start_date:
+            eval_qs = eval_qs.filter(created_at__date__gte=start_date)
+        if end_date:
+            eval_qs = eval_qs.filter(created_at__date__lte=end_date)
+        
+        total_inspections = eval_qs.count()
+        pass_count = eval_qs.filter(decision="Accepted").count()
+        fail_count = eval_qs.exclude(decision="Accepted").count()
+        pass_rate = (pass_count / total_inspections * 100) if total_inspections > 0 else 0
+        
+        recent_inspections = eval_qs.select_related('customer', 'template') \
+                                               .order_by("-created_at")[:5]
+        recent_serializer = InspectionListSerializer(recent_inspections, many=True)
+
+        # 1. Inspections by Stage
+        inspections_by_stage = eval_qs.values('stage').annotate(count=Count('id')).order_by('-count')
+
+        # 2. Inspections by Customer
+        inspections_by_customer = eval_qs.values('customer__name').annotate(count=Count('id')).order_by('-count')
+
+        # 3. Monthly Inspection Trend
+        monthly_trend = eval_qs.annotate(month=TruncMonth('created_at')).values('month').annotate(count=Count('id')).order_by('month')
+
+        # 4. Customer vs Internal Decision
+        internal_decisions = eval_qs.values('decision').annotate(count=Count('id'))
+        customer_decisions = eval_qs.values('customer_decision').annotate(count=Count('id'))
+
+        # ==================== FINAL INSPECTION ANALYTICS ====================
+        # Base queryset with date filtering
+        fi_qs = FinalInspection.objects.all()
+        if start_date:
+            fi_qs = fi_qs.filter(inspection_date__gte=start_date)
+        if end_date:
+            fi_qs = fi_qs.filter(inspection_date__lte=end_date)
+        
+        fi_total = fi_qs.count()
+        fi_pass = fi_qs.filter(result='Pass').count()
+        fi_fail = fi_qs.filter(result='Fail').count()
+        fi_pass_rate = (fi_pass / fi_total * 100) if fi_total > 0 else 0
+
+        # 1. Pass/Fail Monthly Trend
+        fi_monthly_pass = fi_qs.filter(result='Pass').annotate(
+            month=TruncMonth('inspection_date')
+        ).values('month').annotate(count=Count('id')).order_by('month')
+        
+        fi_monthly_fail = fi_qs.filter(result='Fail').annotate(
+            month=TruncMonth('inspection_date')
+        ).values('month').annotate(count=Count('id')).order_by('month')
+
+        # 2. By Customer (Pass/Fail counts)
+        fi_by_customer = fi_qs.values('customer__name').annotate(
+            pass_count=Count('id', filter=Q(result='Pass')),
+            fail_count=Count('id', filter=Q(result='Fail'))
+        ).order_by('-pass_count')[:10]
+
+        # 3. Top Defect Types (filter by inspection date via related FinalInspection)
+        defect_qs = FinalInspectionDefect.objects.all()
+        if start_date:
+            defect_qs = defect_qs.filter(final_inspection__inspection_date__gte=start_date)
+        if end_date:
+            defect_qs = defect_qs.filter(final_inspection__inspection_date__lte=end_date)
+        fi_top_defects = defect_qs.values('description').annotate(
+            total=Count('id')
+        ).order_by('-total')[:10]
+
+        return Response({
+            # Evaluation Data
+            "total_inspections": total_inspections,
+            "pass_count": pass_count,
+            "fail_count": fail_count,
+            "pass_rate": round(pass_rate, 1),
+            "recent_inspections": recent_serializer.data,
+            "inspections_by_stage": list(inspections_by_stage),
+            "inspections_by_customer": list(inspections_by_customer),
+            "monthly_trend": list(monthly_trend),
+            "internal_decisions": list(internal_decisions),
+            "customer_decisions": list(customer_decisions),
+            # Final Inspection Data
+            "fi_total": fi_total,
+            "fi_pass": fi_pass,
+            "fi_fail": fi_fail,
+            "fi_pass_rate": round(fi_pass_rate, 1),
+            "fi_monthly_pass": list(fi_monthly_pass),
+            "fi_monthly_fail": list(fi_monthly_fail),
+            "fi_by_customer": list(fi_by_customer),
+            "fi_top_defects": list(fi_top_defects),
+        })
+
+# ==================== Final Inspection ViewSet ====================
+
+from .models import FinalInspection, FinalInspectionDefect, FinalInspectionSizeCheck, FinalInspectionImage, calculate_sample_size, get_aql_limits
+from .serializers import FinalInspectionSerializer, FinalInspectionListSerializer, FinalInspectionImageSerializer
+
+
+class FinalInspectionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Final Inspection Reports with AQL-based shipment audits.
+    Role-based permissions: QA can edit own, Quality Head/Supervisor can edit all.
+    """
+    queryset = FinalInspection.objects.all()
+    serializer_class = FinalInspectionSerializer
+    permission_classes = [CanEditFinalInspection]
+    
+    # Filtering and ordering
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    ordering_fields = ['created_at', 'inspection_date', 'result', 'order_no']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        """Optimize queries with select_related and prefetch_related."""
+        queryset = FinalInspection.objects.select_related('customer', 'created_by').order_by('-created_at')
+        
+        # Only prefetch nested data for detail views
+        if self.action in ['retrieve', 'update', 'partial_update']:
+            queryset = queryset.prefetch_related('defects', 'size_checks', 'images')
+        
+        # Filter by query params
+        customer_id = self.request.query_params.get('customer')
+        if customer_id:
+            queryset = queryset.filter(customer_id=customer_id)
+        
+        result = self.request.query_params.get('result')
+        if result:
+            queryset = queryset.filter(result=result)
+        
+        # Date range filtering
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        if date_from:
+            queryset = queryset.filter(inspection_date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(inspection_date__lte=date_to)
+        
+        return queryset
+    
+    def get_serializer_class(self):
+        """Use list serializer for list view, full serializer otherwise."""
+        if self.action == 'list':
+            return FinalInspectionListSerializer
+        return FinalInspectionSerializer
+    
+    def perform_create(self, serializer):
+        """Save the user who created this report."""
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def upload_image(self, request, pk=None):
+        """Upload and attach an image to a final inspection with caption and category."""
+        final_inspection = self.get_object()
+        image_file = request.FILES.get('image')
+        caption = request.data.get('caption', 'Final Inspection Image')
+        category = request.data.get('category', 'General')
+        order = request.data.get('order', 0)
+        
+        if not image_file:
+            return Response({'error': 'No image provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Open and compress the image
+            with PILImage.open(image_file) as img:
+                # Convert RGBA/P to RGB for WebP compatibility
+                if img.mode in ('RGBA', 'P', 'LA'):
+                    rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    rgb_img.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                    img = rgb_img
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                # Resize to max 1600x1600
+                img.thumbnail((1600, 1600), PILImage.Resampling.LANCZOS)
+                
+                # Save as WebP with quality 85
+                compressed_buffer = io.BytesIO()
+                img.save(compressed_buffer, format='WEBP', quality=85, method=6)
+                compressed_buffer.seek(0)
+                
+                # Create filename
+                original_name = image_file.name.rsplit('.', 1)[0] if '.' in image_file.name else image_file.name
+                webp_filename = f"{original_name}.webp"
+                
+                # Create Django File object
+                from django.core.files.base import ContentFile
+                compressed_file = ContentFile(compressed_buffer.read(), name=webp_filename)
+                
+                # Create image record
+                img_obj = FinalInspectionImage.objects.create(
+                    final_inspection=final_inspection,
+                    image=compressed_file,
+                    caption=caption,
+                    category=category,
+                    order=int(order)
+                )
+                
+                serializer = FinalInspectionImageSerializer(img_obj)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            return Response({'error': f'Image processing failed: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def calculate_aql(self, request):
+        """
+        Centralized Calculation Endpoint.
+        Input: { "qty": 2000, "standard": "standard", "critical": 0, "major": 5, "minor": 8 }
+        Output: { "sample_size": 125, "limits": { ... }, "result": "Pass/Fail" }
+        """
+        try:
+            # 1. Get Inputs
+            qty = int(request.data.get('qty', 0))
+            standard = request.data.get('standard', 'standard')
+            
+            # defect counts (optional, for checking result)
+            critical_found = int(request.data.get('critical', 0))
+            major_found = int(request.data.get('major', 0))
+            minor_found = int(request.data.get('minor', 0))
+
+            # 2. Calculate Sample Size
+            sample_size = calculate_sample_size(qty)
+
+            # 3. Determine AQL Levels
+            if standard == 'strict':
+                aql_critical, aql_major, aql_minor = 0.0, 1.5, 2.5
+            else:
+                aql_critical, aql_major, aql_minor = 0.0, 2.5, 4.0
+
+            # 4. Get Allowed Limits
+            max_critical = get_aql_limits(sample_size, aql_critical)
+            max_major = get_aql_limits(sample_size, aql_major)
+            max_minor = get_aql_limits(sample_size, aql_minor)
+
+            # 5. Determine Result
+            result = "Pass"
+            if (critical_found > max_critical or 
+                major_found > max_major or 
+                minor_found > max_minor):
+                result = "Fail"
+
+            return Response({
+                "sample_size": sample_size,
+                "limits": {
+                    "critical": max_critical,
+                    "major": max_major,
+                    "minor": max_minor
+                },
+                "result": result,
+                "standard_used": standard
+            })
+            
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+            
+    @action(detail=True, methods=['get'])
+    def pdf(self, request, pk=None):
+        """Generate and download PDF report for final inspection."""
+        final_inspection = self.get_object()
+        buffer = generate_final_inspection_pdf(final_inspection)
+        filename = f"FIR_{final_inspection.order_no}_{final_inspection.style_no}.pdf"
+        return FileResponse(buffer, filename=filename, content_type='application/pdf')
