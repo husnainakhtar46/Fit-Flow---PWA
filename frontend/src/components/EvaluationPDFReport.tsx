@@ -1,87 +1,149 @@
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 
 const styles = StyleSheet.create({
     page: {
-        padding: 30,
+        padding: 50,
         fontSize: 10,
         fontFamily: 'Helvetica',
     },
-    header: {
+    // Header
+    headerTitle: {
         fontSize: 18,
+        fontFamily: 'Helvetica-Bold',
+        marginBottom: 5,
+    },
+    statusBadge: {
+        fontSize: 14,
+        fontFamily: 'Helvetica-Bold',
+        textAlign: 'right',
+        position: 'absolute',
+        top: 0,
+        right: 0,
+    },
+    // General Info
+    infoContainer: {
+        flexDirection: 'row',
+        marginTop: 20,
         marginBottom: 20,
-        textAlign: 'center',
-        fontWeight: 'bold',
-        textDecoration: 'underline',
     },
-    section: {
-        marginBottom: 15,
+    infoColumn: {
+        width: '50%',
+        flexDirection: 'column',
+        gap: 5,
     },
-    sectionTitle: {
+    infoText: {
         fontSize: 12,
-        fontWeight: 'bold',
-        backgroundColor: '#f0f0f0',
-        padding: 5,
-        marginBottom: 10,
+        fontFamily: 'Helvetica',
     },
+    // Tables
     table: {
-        display: 'flex',
         width: 'auto',
         borderStyle: 'solid',
         borderWidth: 1,
         borderRightWidth: 0,
         borderBottomWidth: 0,
+        marginBottom: 20,
     },
     tableRow: {
         margin: 'auto',
         flexDirection: 'row',
     },
     tableColHeader: {
-        width: '12.5%',
+        width: '11.1%', // 9 columns roughly equal
         borderStyle: 'solid',
         borderWidth: 1,
         borderLeftWidth: 0,
         borderTopWidth: 0,
-        backgroundColor: '#e4e4e4',
-        padding: 5,
-        fontWeight: 'bold',
+        padding: 4,
+        fontFamily: 'Helvetica-Bold',
+        fontSize: 8,
     },
     tableCol: {
-        width: '12.5%',
+        width: '11.1%',
         borderStyle: 'solid',
         borderWidth: 1,
         borderLeftWidth: 0,
         borderTopWidth: 0,
-        padding: 5,
+        padding: 4,
+        fontSize: 8,
     },
-    tableColWide: {
-        width: '25%',
-        borderStyle: 'solid',
-        borderWidth: 1,
-        borderLeftWidth: 0,
-        borderTopWidth: 0,
-        padding: 5,
+    // Specific Table Columns
+    colPom: { width: '30%' },
+    colStd: { width: '8.75%' },
+
+    // Comments
+    sectionTitle: {
+        fontSize: 12,
+        fontFamily: 'Helvetica-Bold',
+        marginTop: 15,
+        marginBottom: 8,
     },
-    summaryGrid: {
+    commentBlock: {
+        marginBottom: 10,
+    },
+    commentLabel: {
+        fontSize: 10,
+        fontFamily: 'Helvetica-Bold',
+        marginBottom: 2,
+    },
+    custComment: {
+        fontSize: 9,
+        fontFamily: 'Helvetica-Oblique',
+        color: '#996600', // Brown
+        marginLeft: 10,
+        marginBottom: 2,
+    },
+    qaComment: {
+        fontSize: 9,
+        fontFamily: 'Helvetica',
+        color: '#000099', // Blue
+        marginLeft: 10,
+    },
+    // Fabric & Accessories
+    checkRow: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-    },
-    summaryItem: {
-        width: '50%',
         marginBottom: 5,
     },
-    bold: {
-        fontWeight: 'bold',
+    checkLabel: {
+        fontSize: 10,
+        fontFamily: 'Helvetica-Bold',
+        width: 80,
     },
-    oot: {
-        color: 'red',
-        fontWeight: 'bold',
+
+    // Accessories Table
+    accTable: {
+        marginTop: 5,
+        borderTopWidth: 1,
+        borderLeftWidth: 1,
+        borderColor: '#000',
     },
-    commentBox: {
-        marginBottom: 10,
-        padding: 8,
-        backgroundColor: '#f9f9f9',
-        borderRadius: 3,
-    }
+    accHeader: {
+        backgroundColor: '#e4e4e4',
+        fontFamily: 'Helvetica-Bold',
+        fontSize: 9,
+        padding: 4,
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: '#000',
+    },
+    accRow: {
+        flexDirection: 'row',
+        borderBottomWidth: 1,
+        borderColor: '#000',
+    },
+    accCell: {
+        padding: 4,
+        fontSize: 9,
+        borderRightWidth: 1,
+        borderColor: '#000',
+    },
+
+    // Utilities
+    bold: { fontFamily: 'Helvetica-Bold' },
+    red: { color: '#FF0000' },
+    green: { color: '#008000' },
+    orange: { color: '#FF8000' },
+    gray: { color: '#555' },
 });
 
 interface EvaluationPDFReportProps {
@@ -90,8 +152,17 @@ interface EvaluationPDFReportProps {
 }
 
 const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
+
+    // Helper to get status color
+    const getDecisionColor = (d: string) => {
+        if (d === 'Rejected') return styles.red;
+        if (d === 'Accepted') return styles.green;
+        if (d === 'Represent') return styles.orange;
+        return { color: '#000' };
+    };
+
     const isOutOfTolerance = (value: any, std: any, tol: any) => {
-        if (!value || value === '' || !std || std === '') return false;
+        if (value === null || value === '' || std === null || std === '') return false;
         const numVal = parseFloat(value);
         const numStd = parseFloat(std);
         const numTol = parseFloat(tol);
@@ -101,126 +172,162 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
 
     return (
         <Document>
-            {/* Page 1: General Info */}
-            <Page size="A4" style={styles.page}>
-                <Text style={styles.header}>Sample Evaluation Report</Text>
+            <Page size="LETTER" style={styles.page}>
 
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>General Information</Text>
-                    <View style={styles.summaryGrid}>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Style:</Text> {data.style || 'N/A'}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Color:</Text> {data.color || 'N/A'}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>PO Number:</Text> {data.po_number || 'N/A'}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Stage:</Text> {data.stage || 'N/A'}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Decision:</Text> {data.decision || 'Pending'}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Customer:</Text> {data.customer_name || 'N/A'}</Text></View>
+                {/* Header */}
+                <View>
+                    <Text style={styles.headerTitle}>SAMPLE EVALUATION REPORT</Text>
+                    <Text style={[styles.statusBadge, getDecisionColor(data.decision)]}>
+                        STATUS: {(data.decision || 'PENDING').toUpperCase()}
+                    </Text>
+                </View>
+
+                {/* Info Block */}
+                <View style={styles.infoContainer}>
+                    <View style={styles.infoColumn}>
+                        <Text style={styles.infoText}>Style: {data.style}</Text>
+                        <Text style={styles.infoText}>Color: {data.color}</Text>
+                        <Text style={styles.infoText}>PO #: {data.po_number}</Text>
+                    </View>
+                    <View style={styles.infoColumn}>
+                        <Text style={styles.infoText}>Date: {new Date(data.created_at || Date.now()).toLocaleDateString()}</Text>
+                        <Text style={styles.infoText}>Stage: {data.stage}</Text>
+                        <Text style={styles.infoText}>Customer: {data.customer_name || 'N/A'}</Text>
                     </View>
                 </View>
 
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>QA Comments</Text>
-                    {data.qa_fit_comments && (
-                        <View style={styles.commentBox}>
-                            <Text style={styles.bold}>Fit:</Text>
-                            <Text>{data.qa_fit_comments}</Text>
+                {/* Measurement Table */}
+                <View style={styles.table}>
+                    <View style={styles.tableRow}>
+                        <Text style={[styles.tableColHeader, styles.colPom]}>POM</Text>
+                        <Text style={[styles.tableColHeader, styles.colStd]}>Tol</Text>
+                        <Text style={[styles.tableColHeader, styles.colStd]}>Std</Text>
+                        <Text style={[styles.tableColHeader, styles.colStd]}>S1</Text>
+                        <Text style={[styles.tableColHeader, styles.colStd]}>S2</Text>
+                        <Text style={[styles.tableColHeader, styles.colStd]}>S3</Text>
+                        <Text style={[styles.tableColHeader, styles.colStd]}>S4</Text>
+                        <Text style={[styles.tableColHeader, styles.colStd]}>S5</Text>
+                        <Text style={[styles.tableColHeader, styles.colStd]}>S6</Text>
+                    </View>
+                    {data.measurements?.map((m: any, i: number) => (
+                        <View key={i} style={styles.tableRow}>
+                            <Text style={[styles.tableCol, styles.colPom]}>{m.pom_name}</Text>
+                            <Text style={[styles.tableCol, styles.colStd]}>{m.tol}</Text>
+                            <Text style={[styles.tableCol, styles.colStd]}>{m.std || '-'}</Text>
+                            {['s1', 's2', 's3', 's4', 's5', 's6'].map((k) => (
+                                <Text key={k} style={[styles.tableCol, styles.colStd, isOutOfTolerance(m[k], m.std, m.tol) ? styles.red : {}]}>
+                                    {m[k] || '-'}
+                                </Text>
+                            ))}
                         </View>
-                    )}
-                    {data.qa_workmanship_comments && (
-                        <View style={styles.commentBox}>
-                            <Text style={styles.bold}>Workmanship:</Text>
-                            <Text>{data.qa_workmanship_comments}</Text>
-                        </View>
-                    )}
-                    {data.qa_wash_comments && (
-                        <View style={styles.commentBox}>
-                            <Text style={styles.bold}>Wash:</Text>
-                            <Text>{data.qa_wash_comments}</Text>
-                        </View>
-                    )}
-                    {data.qa_fabric_comments && (
-                        <View style={styles.commentBox}>
-                            <Text style={styles.bold}>Fabric:</Text>
-                            <Text>{data.qa_fabric_comments}</Text>
-                        </View>
-                    )}
-                    {data.remarks && (
-                        <View style={styles.commentBox}>
-                            <Text style={styles.bold}>General Remarks:</Text>
-                            <Text>{data.remarks}</Text>
-                        </View>
-                    )}
+                    ))}
                 </View>
 
-                {/* Accessories Section */}
+                {/* Evaluation Comments (Comparison) */}
+                <Text style={styles.sectionTitle}>Evaluation Comments (Customer → QA):</Text>
+                {[
+                    { label: 'Fit', cust: data.customer_fit_comments, qa: data.qa_fit_comments },
+                    { label: 'Workmanship', cust: data.customer_workmanship_comments, qa: data.qa_workmanship_comments },
+                    { label: 'Wash', cust: data.customer_wash_comments, qa: data.qa_wash_comments },
+                    { label: 'Fabric', cust: data.customer_fabric_comments, qa: data.qa_fabric_comments },
+                    { label: 'Accessories', cust: data.customer_accessories_comments, qa: data.qa_accessories_comments },
+                ].map((item, idx) => {
+                    if (!item.cust && !item.qa) return null;
+                    return (
+                        <View key={idx} style={styles.commentBlock}>
+                            <Text style={styles.commentLabel}>{item.label}:</Text>
+                            {item.cust && <Text style={styles.custComment}>Customer: {item.cust}</Text>}
+                            {item.qa && <Text style={styles.qaComment}>QA: {item.qa}</Text>}
+                        </View>
+                    );
+                })}
+
+                {/* Legacy / General Remarks */}
+                {data.customer_remarks && (
+                    <View style={styles.commentBlock}>
+                        <Text style={styles.commentLabel}>Customer Feedback Summary:</Text>
+                        <Text style={{ fontSize: 9, marginLeft: 10 }}>{data.customer_remarks}</Text>
+                    </View>
+                )}
+                {data.remarks && (
+                    <View style={styles.commentBlock}>
+                        <Text style={styles.commentLabel}>Final Remarks:</Text>
+                        <Text style={{ fontSize: 9, marginLeft: 10 }}>{data.remarks}</Text>
+                    </View>
+                )}
+
+            </Page>
+
+            {/* Page 2: Fabric, Accessories, Images */}
+            <Page size="LETTER" style={styles.page}>
+
+                {/* Fabric Check */}
+                <Text style={styles.sectionTitle}>Fabric Check:</Text>
+                <View style={styles.checkRow}>
+                    <Text style={styles.checkLabel}>Handfeel:</Text>
+                    <Text style={(!data.fabric_handfeel || data.fabric_handfeel === 'OK') ? styles.green : styles.red}>
+                        {data.fabric_handfeel || 'OK'}
+                    </Text>
+                </View>
+                <View style={styles.checkRow}>
+                    <Text style={styles.checkLabel}>Pilling:</Text>
+                    <Text style={
+                        data.fabric_pilling === 'High' ? styles.red :
+                            data.fabric_pilling === 'Low' ? styles.orange : styles.green
+                    }>
+                        {data.fabric_pilling || 'None'}
+                    </Text>
+                </View>
+
+                {/* Accessories Checklist */}
                 {data.accessories_data && data.accessories_data.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Accessories Checklist</Text>
-                        <View style={styles.table}>
-                            <View style={styles.tableRow}>
-                                <View style={[styles.tableColWide, { backgroundColor: '#e4e4e4' }]}><Text>Item</Text></View>
-                                <View style={[styles.tableCol, { width: '20%', backgroundColor: '#e4e4e4' }]}><Text>Status</Text></View>
-                                <View style={[styles.tableCol, { width: '55%', backgroundColor: '#e4e4e4', borderRightWidth: 1 }]}><Text>Comment</Text></View>
+                    <View>
+                        <Text style={styles.sectionTitle}>Accessories Checklist:</Text>
+                        <View style={styles.accTable}>
+                            <View style={styles.accRow}>
+                                <Text style={[styles.accHeader, { width: '40%' }]}>Item</Text>
+                                <Text style={[styles.accHeader, { width: '20%' }]}>Status</Text>
+                                <Text style={[styles.accHeader, { width: '40%' }]}>Remarks</Text>
                             </View>
                             {data.accessories_data.map((item: any, i: number) => (
-                                <View key={i} style={styles.tableRow}>
-                                    <View style={styles.tableColWide}><Text>{item.name}</Text></View>
-                                    <View style={[styles.tableCol, { width: '20%' }]}>
-                                        <Text style={{ color: item.status === 'Not OK' ? 'red' : item.status === 'OK' ? 'green' : 'black' }}>
+                                <View key={i} style={styles.accRow}>
+                                    <Text style={[styles.accCell, { width: '40%' }]}>{item.name}</Text>
+                                    <View style={[styles.accCell, { width: '20%' }]}>
+                                        <Text style={item.status === 'Not OK' ? styles.red : styles.green}>
                                             {item.status}
                                         </Text>
                                     </View>
-                                    <View style={[styles.tableCol, { width: '55%', borderRightWidth: 1 }]}><Text>{item.comment}</Text></View>
+                                    <Text style={[styles.accCell, { width: '40%' }]}>{item.comment}</Text>
                                 </View>
                             ))}
                         </View>
                     </View>
                 )}
-            </Page>
 
-            {/* Page 2: Measurements */}
-            <Page size="A4" style={styles.page}>
-                <Text style={styles.sectionTitle}>Measurements</Text>
-                <View style={styles.table}>
-                    <View style={styles.tableRow}>
-                        <View style={[styles.tableColWide, { backgroundColor: '#e4e4e4' }]}><Text>POM</Text></View>
-                        <View style={styles.tableColHeader}><Text>Tol</Text></View>
-                        <View style={styles.tableColHeader}><Text>Std</Text></View>
-                        <View style={styles.tableColHeader}><Text>S1</Text></View>
-                        <View style={styles.tableColHeader}><Text>S2</Text></View>
-                        <View style={styles.tableColHeader}><Text>S3</Text></View>
-                        <View style={styles.tableColHeader}><Text>S4</Text></View>
-                    </View>
-                    {data.measurements?.map((m: any, i: number) => (
-                        <View key={i} style={styles.tableRow}>
-                            <View style={styles.tableColWide}><Text>{m.pom_name}</Text></View>
-                            <View style={styles.tableCol}><Text>{m.tol}</Text></View>
-                            <View style={styles.tableCol}><Text>{m.std}</Text></View>
-                            {['s1', 's2', 's3', 's4'].map((s) => (
-                                <View key={s} style={styles.tableCol}>
-                                    <Text style={isOutOfTolerance(m[s], m.std, m.tol) ? styles.oot : {}}>
-                                        {m[s]}
-                                    </Text>
-                                </View>
-                            ))}
-                        </View>
-                    ))}
+                {/* Customer Comments Addressed */}
+                <View style={{ marginTop: 20, flexDirection: 'row' }}>
+                    <Text style={styles.bold}>Customer Comments Addressed: </Text>
+                    {data.customer_comments_addressed ?
+                        <Text style={[styles.green, styles.bold, { marginLeft: 10 }]}>✓ YES</Text> :
+                        <Text style={[styles.orange, styles.bold, { marginLeft: 10 }]}>○ NO</Text>
+                    }
                 </View>
-            </Page>
 
-            {/* Page 3: Photos */}
-            <Page size="A4" style={styles.page}>
-                <Text style={styles.sectionTitle}>Attached Photos</Text>
+                {/* Images */}
+                <Text style={[styles.sectionTitle, { marginTop: 30 }]}>INSPECTION IMAGES</Text>
                 {images && images.filter(img => img.file).length > 0 ? (
-                    <View>
-                        <Text style={{ marginBottom: 10 }}>Total Photos: {images.filter(img => img.file).length}</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                         {images.filter(img => img.file).map((img, i) => (
-                            <View key={i} style={{ marginBottom: 5, padding: 5, backgroundColor: '#f5f5f5' }}>
-                                <Text>📷 Photo {i + 1}: {img.caption || 'No caption'}</Text>
+                            <View key={i} style={{ width: '45%', marginBottom: 20 }}>
+                                <Image
+                                    src={img.file}
+                                    style={{ width: '100%', height: 150, objectFit: 'contain', backgroundColor: '#f0f0f0' }}
+                                />
+                                <Text style={{ fontSize: 8, marginTop: 5, textAlign: 'center' }}>
+                                    {img.caption || `Image ${i + 1}`}
+                                </Text>
                             </View>
                         ))}
-                        <Text style={{ marginTop: 10, fontSize: 8, color: '#666' }}>
-                            Note: Photos saved locally will be uploaded during sync.
-                        </Text>
                     </View>
                 ) : (
                     <Text>No photos attached.</Text>
