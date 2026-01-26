@@ -1,13 +1,10 @@
-/**
- * Image Uploader - Handles photo evidence upload with category and caption.
- * Extracted from FinalInspectionForm.tsx for better maintainability.
- */
-
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Upload, Trash2 } from 'lucide-react';
+import { Upload, Trash2, Loader2 } from 'lucide-react';
 import { UploadedImage } from './types';
+import { compressImage } from '../../lib/imageUtils';
 
 interface ImageUploaderProps {
     uploadedImages: UploadedImage[];
@@ -15,15 +12,55 @@ interface ImageUploaderProps {
 }
 
 export function ImageUploader({ uploadedImages, onImagesChange }: ImageUploaderProps) {
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const [isCompressing, setIsCompressing] = useState(false);
+
+    // Memory Leak Fix: Clean up Object URLs when images change or component unmounts
+    useEffect(() => {
+        return () => {
+            uploadedImages.forEach(img => {
+                if (img.previewUrl && !img.isExisting) {
+                    URL.revokeObjectURL(img.previewUrl);
+                }
+            });
+        };
+    }, []); // Run cleanup on unmount for all
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
-        if (files) {
-            const newImages: UploadedImage[] = Array.from(files).map(file => ({
-                file,
-                caption: '',
-                category: 'General',
-            }));
-            onImagesChange([...uploadedImages, ...newImages]);
+        if (files && files.length > 0) {
+            setIsCompressing(true);
+            const newImages: UploadedImage[] = [];
+
+            try {
+                // Compress images efficiently
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    try {
+                        const compressedFile = await compressImage(file);
+                        newImages.push({
+                            file: compressedFile, // Use smaller file
+                            caption: '',
+                            category: 'General',
+                            previewUrl: URL.createObjectURL(compressedFile) // Create once
+                        });
+                    } catch (err) {
+                        console.error("Compression skipped for file", file.name, err);
+                        // Fallback to original if compression fails
+                        newImages.push({
+                            file,
+                            caption: '',
+                            category: 'General',
+                            previewUrl: URL.createObjectURL(file)
+                        });
+                    }
+                }
+
+                onImagesChange([...uploadedImages, ...newImages]);
+            } finally {
+                setIsCompressing(false);
+                // Reset input to allow re-uploading duplicate files if needed
+                e.target.value = '';
+            }
         }
     };
 
@@ -34,27 +71,26 @@ export function ImageUploader({ uploadedImages, onImagesChange }: ImageUploaderP
     };
 
     const removeImage = (index: number) => {
+        const imageToRemove = uploadedImages[index];
+        // Cleanup URL immediately
+        if (imageToRemove.previewUrl && !imageToRemove.isExisting) {
+            URL.revokeObjectURL(imageToRemove.previewUrl);
+        }
+
         const newImages = [...uploadedImages];
         newImages.splice(index, 1);
         onImagesChange(newImages);
     };
 
-    const getImagePreviewUrl = (img: UploadedImage): string => {
-        if (img.isExisting && img.previewUrl) {
-            return img.previewUrl;
-        }
-        return URL.createObjectURL(img.file);
-    };
-
     return (
         <Card>
             <CardHeader>
-                <CardTitle>7. Photo Evidence</CardTitle>
+                <CardTitle>7. Photo Evidence {isCompressing && <span className="text-sm font-normal text-blue-600 animate-pulse ml-2">(Compressing...)</span>}</CardTitle>
             </CardHeader>
             <CardContent>
                 <div className="space-y-4">
                     {/* Upload Area */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition-colors cursor-pointer relative">
+                    <div className={`border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition-colors cursor-pointer relative ${isCompressing ? 'opacity-50 pointer-events-none' : ''}`}>
                         <input
                             type="file"
                             multiple
@@ -62,11 +98,12 @@ export function ImageUploader({ uploadedImages, onImagesChange }: ImageUploaderP
                             capture="environment"
                             onChange={handleImageUpload}
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            disabled={isCompressing}
                         />
                         <div className="flex flex-col items-center gap-2">
-                            <Upload className="h-10 w-10 text-gray-400" />
+                            {isCompressing ? <Loader2 className="h-10 w-10 text-blue-500 animate-spin" /> : <Upload className="h-10 w-10 text-gray-400" />}
                             <p className="text-sm text-gray-600 font-medium">Click to upload or drag and drop</p>
-                            <p className="text-xs text-gray-400">JPG, PNG (Max 10MB)</p>
+                            <p className="text-xs text-gray-400">Auto-compressed for faster sync</p>
                         </div>
                     </div>
 
@@ -78,7 +115,7 @@ export function ImageUploader({ uploadedImages, onImagesChange }: ImageUploaderP
                                     {/* Thumbnail */}
                                     <div className="h-24 w-24 bg-gray-100 rounded overflow-hidden flex-shrink-0 border">
                                         <img
-                                            src={getImagePreviewUrl(img)}
+                                            src={img.previewUrl || (img.isExisting ? img.url : '')}
                                             alt="Preview"
                                             className="h-full w-full object-cover"
                                         />
@@ -88,7 +125,7 @@ export function ImageUploader({ uploadedImages, onImagesChange }: ImageUploaderP
                                     <div className="flex-1 space-y-2">
                                         <div className="flex justify-between">
                                             <span className="text-xs text-gray-500 font-mono truncate max-w-[150px]">
-                                                {img.file.name || 'Existing Image'}
+                                                {img.file?.name ? `${(img.file.size / 1024).toFixed(0)}KB` : 'Existing Image'}
                                             </span>
                                             <span className="text-xs font-bold text-blue-600">{img.category}</span>
                                         </div>

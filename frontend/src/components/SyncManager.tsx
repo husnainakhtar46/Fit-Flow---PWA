@@ -42,41 +42,57 @@ export default function SyncManager({ type }: SyncManagerProps) {
 
         try {
             for (const inspection of pendingInspections!) {
-                // Prepare payload
-                const payload = { ...inspection.formData };
+                try {
+                    // Check if we already have a server ID (Partial Sync Case)
+                    let newId = inspection.server_id;
 
-                // 1. Upload main record to correct endpoint
-                const response = await axios.post(`${API_URL}${endpoint}`, payload, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
+                    if (!newId) {
+                        // 1. Upload main record
+                        const payload = { ...inspection.formData };
+                        const response = await axios.post(`${API_URL}${endpoint}`, payload, {
+                            headers: { Authorization: `Bearer ${token}` },
+                        });
+                        newId = response.data.id;
 
-                const newId = response.data.id;
+                        // Save server_id locally immediately to prevent duplicates on crash
+                        if (inspection.id) {
+                            await db.inspections.update(inspection.id, { server_id: newId });
+                        }
+                    }
 
-                // 2. Upload images
-                for (const img of inspection.images) {
-                    const formData = new FormData();
-                    formData.append('image', img.file);
-                    formData.append('caption', img.caption);
-                    formData.append('category', img.category);
+                    // 2. Upload images
+                    for (const img of inspection.images) {
+                        const formData = new FormData();
+                        formData.append('image', img.file); // file is now compressed (processed in ImageUploader)
+                        formData.append('caption', img.caption);
+                        formData.append('category', img.category);
 
-                    await axios.post(`${API_URL}${endpoint}${newId}/upload_image/`, formData, {
-                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
-                    });
+                        await axios.post(`${API_URL}${endpoint}${newId}/upload_image/`, formData, {
+                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
+                        });
+                    }
+
+                    // 3. SUCCESS: Delete from local DB
+                    if (inspection.id) {
+                        await db.inspections.delete(inspection.id);
+                    }
+                } catch (itemError) {
+                    console.error("Failed to sync item", itemError);
+                    // Continue to next item even if one fails
                 }
-
-                // 3. SUCCESS: Delete from local DB to save storage
-                await db.inspections.delete(inspection.id!);
             }
 
             toast({
-                title: "Sync Complete",
-                description: `Successfully uploaded ${pendingCount} ${type === 'evaluation' ? 'evaluations' : 'final inspections'}. Local storage cleared.`,
+                title: "Sync Process Finished",
+                description: `Sync attempt complete. Check pending items if any remain.`,
             });
+            // Force refresh of list
+            window.location.reload();
         } catch (error) {
-            console.error("Sync failed:", error);
+            console.error("Sync critical failure:", error);
             toast({
                 title: "Sync Failed",
-                description: "Some items could not be uploaded. Please check your connection.",
+                description: "Critical error during sync.",
                 variant: "destructive",
             });
         } finally {

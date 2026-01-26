@@ -56,6 +56,7 @@ export interface UploadedImage {
     previewUrl?: string;
     id?: string;
     isExisting?: boolean;
+    url?: string;
 }
 
 export interface ServerCalculations {
