@@ -57,7 +57,7 @@ type Measurement = {
 
 type AccessoryItem = {
     name: string;
-    status: 'OK' | 'Not OK' | 'N/A';
+    status: 'OK' | 'Not OK';
     comment: string;
 };
 
@@ -913,75 +913,112 @@ const EvaluationForm = () => {
                                         <div className="lg:col-span-2 border p-4 rounded-lg bg-gray-50">
                                             <div className="flex justify-between items-center mb-4">
                                                 <Label className="text-base font-bold">Accessories Checklist</Label>
-                                                <div className="flex gap-2">
-                                                    <Select onValueChange={(val) => appendAcc({ name: val, status: 'OK', comment: '' })}>
-                                                        <SelectTrigger className="w-[140px] h-8 text-xs bg-white">
-                                                            <SelectValue placeholder="+ Add Preset" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {ACCESSORY_PRESETS.map(preset => (
-                                                                <SelectItem key={preset} value={preset}>{preset}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => appendAcc({ name: '', status: 'OK', comment: '' })}
-                                                        className="bg-white hover:bg-gray-100 h-8"
-                                                    >
-                                                        <Plus className="w-3 h-3 mr-1" /> Custom
-                                                    </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => appendAcc({ name: '', status: 'OK', comment: '' })}
+                                                    className="bg-white hover:bg-gray-100 h-8"
+                                                >
+                                                    <Plus className="w-3 h-3 mr-1" /> Custom Item
+                                                </Button>
+                                            </div>
+
+                                            {/* Presets Checklist */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                                                {ACCESSORY_PRESETS.map(preset => {
+                                                    const existingIndex = accFields.findIndex(f => f.name === preset);
+                                                    const isChecked = existingIndex !== -1;
+
+                                                    return (
+                                                        <div key={preset} className={`p-3 rounded-lg border transition-all ${isChecked ? 'bg-white border-blue-200 shadow-sm' : 'bg-gray-100/50 border-transparent hover:bg-gray-100'}`}>
+                                                            <div className="flex items-center gap-3 mb-2">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                                    checked={isChecked}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) {
+                                                                            appendAcc({ name: preset, status: 'OK', comment: '' });
+                                                                        } else {
+                                                                            if (existingIndex !== -1) removeAcc(existingIndex);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <span className={`font-medium text-sm ${isChecked ? 'text-gray-900' : 'text-gray-500'}`}>{preset}</span>
+                                                            </div>
+
+                                                            {isChecked && (
+                                                                <div className="pl-7 space-y-2">
+                                                                    <Select
+                                                                        value={watch(`accessories_data.${existingIndex}.status`)}
+                                                                        onValueChange={(val) => setValue(`accessories_data.${existingIndex}.status`, val as any)}
+                                                                    >
+                                                                        <SelectTrigger className="h-7 text-xs">
+                                                                            <SelectValue />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="OK">OK</SelectItem>
+                                                                            <SelectItem value="Not OK">Not OK</SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <Input
+                                                                        {...register(`accessories_data.${existingIndex}.comment`)}
+                                                                        placeholder="Comment..."
+                                                                        className="h-7 text-xs bg-gray-50"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Custom Items List */}
+                                            {accFields.some(f => !ACCESSORY_PRESETS.includes(f.name)) && (
+                                                <div className="space-y-2 mt-4 pt-4 border-t">
+                                                    <Label className="text-sm font-semibold text-gray-700">Custom Items</Label>
+                                                    {accFields.map((field, index) => {
+                                                        if (ACCESSORY_PRESETS.includes(field.name)) return null; // Skip presets here
+
+                                                        return (
+                                                            <div key={field.id} className="flex gap-2 items-start bg-white p-2 rounded border border-orange-100 bg-orange-50/30">
+                                                                <Input
+                                                                    {...register(`accessories_data.${index}.name`)}
+                                                                    placeholder="Item name"
+                                                                    className="w-1/4 h-8 text-sm"
+                                                                />
+                                                                <Select
+                                                                    value={watch(`accessories_data.${index}.status`)}
+                                                                    onValueChange={(val) => setValue(`accessories_data.${index}.status`, val as any)}
+                                                                >
+                                                                    <SelectTrigger className="w-[100px] h-8 text-xs">
+                                                                        <SelectValue />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="OK">OK</SelectItem>
+                                                                        <SelectItem value="Not OK">Not OK</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <Input
+                                                                    {...register(`accessories_data.${index}.comment`)}
+                                                                    placeholder="Comment"
+                                                                    className="flex-1 h-8 text-sm"
+                                                                />
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    onClick={() => removeAcc(index)}
+                                                                    className="h-8 w-8 text-gray-400 hover:text-red-500"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
-                                            </div>
-
-                                            <div className="space-y-2 max-h-60 overflow-y-auto">
-                                                {accFields.map((field, index) => (
-                                                    <div key={field.id} className="flex gap-2 items-start bg-white p-2 rounded border">
-                                                        <Input
-                                                            {...register(`accessories_data.${index}.name`)}
-                                                            placeholder="Item name"
-                                                            className="w-1/4 h-8 text-sm"
-                                                        />
-                                                        <Select
-                                                            value={watch(`accessories_data.${index}.status`)}
-                                                            onValueChange={(val) => setValue(`accessories_data.${index}.status`, val as any)}
-                                                        >
-                                                            <SelectTrigger className={`w-24 h-8 text-xs font-medium ${watch(`accessories_data.${index}.status`) === 'Not OK' ? 'text-red-600 bg-red-50' :
-                                                                watch(`accessories_data.${index}.status`) === 'N/A' ? 'text-gray-400' : 'text-green-600 bg-green-50'
-                                                                }`}>
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="OK">OK</SelectItem>
-                                                                <SelectItem value="Not OK">Not OK</SelectItem>
-                                                                <SelectItem value="N/A">N/A</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <Input
-                                                            {...register(`accessories_data.${index}.comment`)}
-                                                            placeholder="Remarks..."
-                                                            className="flex-1 h-8 text-sm"
-                                                        />
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => removeAcc(index)}
-                                                            className="text-red-500 hover:bg-red-50 h-8 w-8"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </Button>
-                                                    </div>
-                                                ))}
-
-                                                {accFields.length === 0 && (
-                                                    <div className="text-center py-6 text-gray-400 border-2 border-dashed rounded-md text-sm">
-                                                        No accessories added. Use presets or click "Custom" to add items.
-                                                    </div>
-                                                )}
-                                            </div>
+                                            )}
                                         </div>
 
                                         {/* Fabric Check Panel (1 column) */}
@@ -1031,7 +1068,6 @@ const EvaluationForm = () => {
                                                         <SelectContent>
                                                             <SelectItem value="None">None (Good)</SelectItem>
                                                             <SelectItem value="Low">Low (Acceptable)</SelectItem>
-                                                            <SelectItem value="High">High (Reject)</SelectItem>
                                                         </SelectContent>
                                                     </Select>
                                                 </div>
@@ -1086,13 +1122,13 @@ const EvaluationForm = () => {
                                     </Button>
                                 </form>
                             </div>
-                        </DialogContent>
-                    </Dialog>
-                </div>
-            </div>
+                        </DialogContent >
+                    </Dialog >
+                </div >
+            </div >
 
             {/* Main List */}
-            <InspectionFilters
+            < InspectionFilters
                 filters={filters}
                 onFiltersChange={handleFiltersChange}
                 onClearAll={handleClearFilters}
@@ -1168,7 +1204,7 @@ const EvaluationForm = () => {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

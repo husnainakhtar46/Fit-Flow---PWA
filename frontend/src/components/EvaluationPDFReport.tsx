@@ -131,6 +131,12 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                             <Text>{data.qa_workmanship_comments}</Text>
                         </View>
                     )}
+                    {data.qa_wash_comments && (
+                        <View style={styles.commentBox}>
+                            <Text style={styles.bold}>Wash:</Text>
+                            <Text>{data.qa_wash_comments}</Text>
+                        </View>
+                    )}
                     {data.qa_fabric_comments && (
                         <View style={styles.commentBox}>
                             <Text style={styles.bold}>Fabric:</Text>
@@ -144,6 +150,31 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                         </View>
                     )}
                 </View>
+
+                {/* Accessories Section */}
+                {data.accessories_data && data.accessories_data.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Accessories Checklist</Text>
+                        <View style={styles.table}>
+                            <View style={styles.tableRow}>
+                                <View style={[styles.tableColWide, { backgroundColor: '#e4e4e4' }]}><Text>Item</Text></View>
+                                <View style={[styles.tableCol, { width: '20%', backgroundColor: '#e4e4e4' }]}><Text>Status</Text></View>
+                                <View style={[styles.tableCol, { width: '55%', backgroundColor: '#e4e4e4', borderRightWidth: 1 }]}><Text>Comment</Text></View>
+                            </View>
+                            {data.accessories_data.map((item: any, i: number) => (
+                                <View key={i} style={styles.tableRow}>
+                                    <View style={styles.tableColWide}><Text>{item.name}</Text></View>
+                                    <View style={[styles.tableCol, { width: '20%' }]}>
+                                        <Text style={{ color: item.status === 'Not OK' ? 'red' : item.status === 'OK' ? 'green' : 'black' }}>
+                                            {item.status}
+                                        </Text>
+                                    </View>
+                                    <View style={[styles.tableCol, { width: '55%', borderRightWidth: 1 }]}><Text>{item.comment}</Text></View>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
             </Page>
 
             {/* Page 2: Measurements */}
