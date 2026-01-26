@@ -811,11 +811,18 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
         setIsGeneratingPdf(false);
       }
     } else {
-      // --- ONLINE FLOW (Prototype) ---
-      console.log("Online Payload:", finalPayload);
-      if (confirm('Online mode: Simulate server upload?')) {
-        toast({ title: "Success", description: "Standard upload successful (simulated)." });
-        onClose();
+      // --- ONLINE FLOW (REAL) ---
+      try {
+        if (inspectionId) {
+          // If editing an existing report
+          updateMutation.mutate({ id: inspectionId, data: finalPayload as any });
+        } else {
+          // If creating a new report
+          createMutation.mutate(finalPayload as any);
+        }
+      } catch (error) {
+        console.error("Online submission failed", error);
+        toast({ title: "Submission Failed", variant: "destructive" });
       }
     }
   };
@@ -910,7 +917,12 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
               </div>
               <div>
                 <Label className="text-blue-800 font-bold">Required Sample Size</Label>
-                <Input type="number" {...register('sample_size', { valueAsNumber: true })} readOnly className="bg-gray-100 mt-1 font-bold text-lg" />
+                <Input
+                  type="number"
+                  {...register('sample_size', { valueAsNumber: true })}
+                  placeholder="Enter manually if offline"
+                  className="mt-1 font-bold text-lg border-blue-300"
+                />
               </div>
             </div>
           </div>

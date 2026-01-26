@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -13,17 +13,15 @@ interface ImageUploaderProps {
 
 export function ImageUploader({ uploadedImages, onImagesChange }: ImageUploaderProps) {
     const [isCompressing, setIsCompressing] = useState(false);
+    // Fix: Use ref to track created URLs for cleanup, independent of state updates
+    const generatedUrls = useRef<string[]>([]);
 
-    // Memory Leak Fix: Clean up Object URLs when images change or component unmounts
+    // Memory Leak Fix: Clean up generated URLs on unmount
     useEffect(() => {
         return () => {
-            uploadedImages.forEach(img => {
-                if (img.previewUrl && !img.isExisting) {
-                    URL.revokeObjectURL(img.previewUrl);
-                }
-            });
+            generatedUrls.current.forEach(url => URL.revokeObjectURL(url));
         };
-    }, []); // Run cleanup on unmount for all
+    }, []);
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -37,20 +35,26 @@ export function ImageUploader({ uploadedImages, onImagesChange }: ImageUploaderP
                     const file = files[i];
                     try {
                         const compressedFile = await compressImage(file);
+                        const previewUrl = URL.createObjectURL(compressedFile);
+                        generatedUrls.current.push(previewUrl); // Track for cleanup
+
                         newImages.push({
                             file: compressedFile, // Use smaller file
                             caption: '',
                             category: 'General',
-                            previewUrl: URL.createObjectURL(compressedFile) // Create once
+                            previewUrl: previewUrl
                         });
                     } catch (err) {
                         console.error("Compression skipped for file", file.name, err);
                         // Fallback to original if compression fails
+                        const previewUrl = URL.createObjectURL(file);
+                        generatedUrls.current.push(previewUrl);
+
                         newImages.push({
                             file,
                             caption: '',
                             category: 'General',
-                            previewUrl: URL.createObjectURL(file)
+                            previewUrl: previewUrl
                         });
                     }
                 }
@@ -71,12 +75,9 @@ export function ImageUploader({ uploadedImages, onImagesChange }: ImageUploaderP
     };
 
     const removeImage = (index: number) => {
-        const imageToRemove = uploadedImages[index];
-        // Cleanup URL immediately
-        if (imageToRemove.previewUrl && !imageToRemove.isExisting) {
-            URL.revokeObjectURL(imageToRemove.previewUrl);
-        }
-
+        // We do typically want to revoke URL here to save memory immediately, 
+        // but to be safe against double-revoke or race conditions with the ref list,
+        // we'll rely on the unmount cleanup.
         const newImages = [...uploadedImages];
         newImages.splice(index, 1);
         onImagesChange(newImages);
