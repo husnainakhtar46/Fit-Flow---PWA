@@ -20,7 +20,7 @@ const Sidebar = () => {
             visible: canViewDashboard
         },
         {
-            href: '/inspections',
+            href: '/evaluation',
             label: 'Evaluation',
             icon: ClipboardCheck,
             visible: true // Everyone can see evaluations

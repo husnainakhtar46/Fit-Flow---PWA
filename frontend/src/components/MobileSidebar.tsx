@@ -15,7 +15,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
 
     const allLinks = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, visible: canViewDashboard },
-        { href: '/inspections', label: 'Evaluation', icon: ClipboardCheck, visible: true },
+        { href: '/evaluation', label: 'Evaluation', icon: ClipboardCheck, visible: true },
         { href: '/final-inspections', label: 'Final Inspection', icon: ClipboardList, visible: true },
         { href: '/customer-feedback', label: 'Customer Feedback', icon: MessageSquare, visible: true },
         { href: '/templates', label: 'Templates', icon: FileText, visible: canViewTemplates },

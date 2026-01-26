@@ -9,7 +9,7 @@ const MobileNav = () => {
 
     // Core pages for bottom navigation with role filtering
     const allLinks = [
-        { href: '/inspections', label: 'Evaluation', icon: ClipboardCheck, visible: true },
+        { href: '/evaluation', label: 'Evaluation', icon: ClipboardCheck, visible: true },
         { href: '/final-inspections', label: 'Inspection', icon: ClipboardList, visible: true },
         { href: '/customer-feedback', label: 'Feedback', icon: MessageSquare, visible: true },
         { href: '/templates', label: 'Templates', icon: FileText, visible: canViewTemplates },

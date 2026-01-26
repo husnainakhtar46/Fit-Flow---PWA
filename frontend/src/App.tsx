@@ -5,7 +5,7 @@ import { Toaster } from './components/ui/toaster';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Templates from './pages/Templates';
-import Inspections from './pages/Inspections';
+import EvaluationForm from './pages/EvaluationForm';
 import Customers from './pages/Customers';
 import CustomerFeedback from './pages/CustomerFeedback';
 import FinalInspections from './pages/FinalInspections';
@@ -26,7 +26,7 @@ const ProtectedRoute = ({
     requiredPermission: boolean;
 }) => {
     if (!requiredPermission) {
-        return <Navigate to="/inspections" replace />;
+        return <Navigate to="/evaluation" replace />;
     }
     return <>{children}</>;
 };
@@ -62,7 +62,7 @@ const Layout = () => {
 
 const HomeRedirect = () => {
     const { canViewDashboard } = useAuth();
-    return <Navigate to={canViewDashboard ? "/dashboard" : "/inspections"} />;
+    return <Navigate to={canViewDashboard ? "/dashboard" : "/evaluation"} />;
 };
 
 // Wrapper components for protected routes
@@ -103,7 +103,7 @@ function App() {
                         <Route path="/" element={<HomeRedirect />} />
                         <Route path="/dashboard" element={<ProtectedDashboard />} />
                         <Route path="/templates" element={<ProtectedTemplates />} />
-                        <Route path="/inspections" element={<Inspections />} />
+                        <Route path="/evaluation" element={<EvaluationForm />} />
                         <Route path="/final-inspections" element={<FinalInspections />} />
                         <Route path="/customer-feedback" element={<CustomerFeedback />} />
                         <Route path="/customers" element={<ProtectedCustomers />} />

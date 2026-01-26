@@ -28,7 +28,7 @@ const Login = () => {
             if (data.is_superuser || ['quality_head', 'quality_supervisor'].includes(data.user_type)) {
                 navigate('/dashboard');
             } else {
-                navigate('/inspections');
+                navigate('/evaluation');
             }
         },
         onError: () => {

@@ -67,7 +67,7 @@ const ACCESSORY_PRESETS = [
     'Drawstring', 'Elastic', 'Velcro', 'Snap', 'Hook & Eye', 'Rivet'
 ];
 
-const Inspections = () => {
+const EvaluationForm = () => {
     const queryClient = useQueryClient();
     const { canCreateInspections, isReadOnly, canEditEvaluation } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
@@ -1172,4 +1172,4 @@ const Inspections = () => {
     );
 };
 
-export default Inspections;
+export default EvaluationForm;
