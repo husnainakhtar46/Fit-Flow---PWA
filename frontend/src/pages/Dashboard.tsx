@@ -34,13 +34,25 @@ const getStartOfMonth = (date: Date) => {
 const Dashboard = () => {
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
+    const [customerId, setCustomerId] = useState<string>('');
+
+    // Fetch Customers for Filter
+    const { data: customers } = useQuery({
+        queryKey: ['customers'],
+        queryFn: async () => {
+            const res = await api.get('/customers/');
+            return Array.isArray(res.data) ? res.data : res.data.results || [];
+        }
+    });
 
     const { data, isLoading } = useQuery({
-        queryKey: ['dashboard', startDate, endDate],
+        queryKey: ['dashboard', startDate, endDate, customerId],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (startDate) params.append('start_date', startDate);
             if (endDate) params.append('end_date', endDate);
+            if (customerId) params.append('customer_id', customerId);
+
             const url = `/dashboard/${params.toString() ? '?' + params.toString() : ''}`;
             const res = await api.get(url);
             return res.data;
@@ -188,6 +200,18 @@ const Dashboard = () => {
                                 onChange={(e) => setEndDate(e.target.value)}
                                 className="border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={customerId}
+                                onChange={(e) => setCustomerId(e.target.value)}
+                                className="border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px]"
+                            >
+                                <option value="">All Customers</option>
+                                {customers?.map((c: any) => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="flex items-center gap-2 ml-auto">
                             <button

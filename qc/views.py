@@ -228,14 +228,17 @@ class DashboardView(APIView):
         # Parse optional date range filters
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
+        customer_id = request.query_params.get('customer_id')
         
         # ==================== EVALUATION ANALYTICS ====================
-        # Base queryset with date filtering
+        # Base queryset with filters
         eval_qs = Inspection.objects.all()
         if start_date:
             eval_qs = eval_qs.filter(created_at__date__gte=start_date)
         if end_date:
             eval_qs = eval_qs.filter(created_at__date__lte=end_date)
+        if customer_id:
+            eval_qs = eval_qs.filter(customer_id=customer_id)
         
         total_inspections = eval_qs.count()
         pass_count = eval_qs.filter(decision="Accepted").count()
@@ -260,12 +263,14 @@ class DashboardView(APIView):
         customer_decisions = eval_qs.values('customer_decision').annotate(count=Count('id'))
 
         # ==================== FINAL INSPECTION ANALYTICS ====================
-        # Base queryset with date filtering
+        # Base queryset with filters
         fi_qs = FinalInspection.objects.all()
         if start_date:
             fi_qs = fi_qs.filter(inspection_date__gte=start_date)
         if end_date:
             fi_qs = fi_qs.filter(inspection_date__lte=end_date)
+        if customer_id:
+            fi_qs = fi_qs.filter(customer_id=customer_id)
         
         fi_total = fi_qs.count()
         fi_pass = fi_qs.filter(result='Pass').count()
