@@ -37,13 +37,16 @@ const Dashboard = () => {
     const [customerId, setCustomerId] = useState<string>('');
 
     // Fetch Customers for Filter
-    const { data: customers } = useQuery({
-        queryKey: ['customers'],
+    const { data: customersData } = useQuery({
+        queryKey: ['customers', 'all'], // Unique key to avoid collision with paginated lists
         queryFn: async () => {
-            const res = await api.get('/customers/');
-            return Array.isArray(res.data) ? res.data : res.data.results || [];
+            const res = await api.get('/customers/?page_size=100'); // Get all/many
+            return res.data;
         }
     });
+
+    // Handle both array and paginated response formats safely
+    const customers = Array.isArray(customersData) ? customersData : customersData?.results || [];
 
     const { data, isLoading } = useQuery({
         queryKey: ['dashboard', startDate, endDate, customerId],
