@@ -829,15 +829,60 @@ const EvaluationForm = () => {
     };
 
     const handleDownloadPdf = async (id: string, style: string) => {
+        const toastId = toast.loading('Generating PDF...');
         try {
-            const res = await api.get(`/inspections/${id}/pdf/`, { responseType: 'blob' });
-            const url = window.URL.createObjectURL(new Blob([res.data]));
+            // 1. Try Backend First (Online Mode)
+            const response = await api.get(`/inspections/${id}/pdf/`, {
+                responseType: 'blob',
+                timeout: 8000
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', `${style}_Evaluation.pdf`);
             document.body.appendChild(link);
             link.click();
-        } catch (e) { toast.error('Download failed'); }
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            toast.dismiss(toastId);
+            toast.success('PDF Downloaded');
+        } catch (serverError: any) {
+            console.warn("Backend PDF failed, switching to offline mode:", serverError);
+
+            // Show specific reason if available
+            const reason = serverError.response
+                ? `Status ${serverError.response.status}`
+                : serverError.message || 'Unknown';
+
+            console.log(`Backend failed (${reason}). Switching to offline mode...`);
+            toast.message(`Backend unreachable (${reason}). Generating locally...`, { id: toastId });
+
+            // 2. Fallback to Frontend (Offline Mode)
+            try {
+                // Fetch full details - relies on Cache if offline
+                let data = queryClient.getQueryData(['inspection', id]);
+
+                if (!data) {
+                    const res = await api.get(`/inspections/${id}/`);
+                    data = res.data;
+                }
+
+                if (!data) throw new Error("No data available for PDF");
+
+                const images = (data as any).images || [];
+                const blob = await pdf(
+                    <EvaluationPDFReport data={data} images={images} />
+                ).toBlob();
+
+                saveAs(blob, `${style}_Evaluation.pdf`);
+                toast.dismiss(toastId);
+                toast.success('PDF Downloaded (Offline Mode)');
+            } catch (clientError) {
+                console.error(clientError);
+                toast.dismiss(toastId);
+                toast.error('Download failed completely. Check connection.');
+            }
+        }
     };
 
     const handleCloseAttempt = (open: boolean) => {

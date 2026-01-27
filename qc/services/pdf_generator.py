@@ -109,12 +109,16 @@ def generate_pdf_buffer(inspection):
         p.drawString(col_starts[1], y_pos, str(m.tol))
         p.drawString(col_starts[2], y_pos, str(m.std) if m.std is not None else '-')
 
-        draw_value(col_starts[3], m.s1, m.std, m.tol)
-        draw_value(col_starts[4], m.s2, m.std, m.tol)
-        draw_value(col_starts[5], m.s3, m.std, m.tol)
-        draw_value(col_starts[6], m.s4, m.std, m.tol)
-        draw_value(col_starts[7], m.s5, m.std, m.tol)
-        draw_value(col_starts[8], m.s6, m.std, m.tol)
+        # Fetch samples from related objects
+        # m.samples.all() should be prefetched in view
+        samples_dict = {s.index: s.value for s in m.samples.all()}
+
+        draw_value(col_starts[3], samples_dict.get(1), m.std, m.tol)
+        draw_value(col_starts[4], samples_dict.get(2), m.std, m.tol)
+        draw_value(col_starts[5], samples_dict.get(3), m.std, m.tol)
+        draw_value(col_starts[6], samples_dict.get(4), m.std, m.tol)
+        draw_value(col_starts[7], samples_dict.get(5), m.std, m.tol)
+        draw_value(col_starts[8], samples_dict.get(6), m.std, m.tol)
         
         y_pos -= 12
         if y_pos < 50:
@@ -498,7 +502,17 @@ def generate_final_inspection_pdf(final_inspection):
         
         p.setFont("Helvetica", 9)
         for m in final_inspection.measurements.all():
-            vals = [m.pom_name, str(m.tol), str(m.spec), m.s1, m.s2, m.s3, m.s4, m.s5, m.s6]
+            samples_dict = {s.index: s.value for s in m.samples.all()}
+            
+            def get_sample_val(idx):
+                val = samples_dict.get(idx)
+                return val if val is not None else "-"
+
+            vals = [
+                m.pom_name, str(m.tol), str(m.spec),
+                get_sample_val(1), get_sample_val(2), get_sample_val(3),
+                get_sample_val(4), get_sample_val(5), get_sample_val(6)
+            ]
             curr_x = 50
             max_height = 20
             
