@@ -199,14 +199,13 @@ def generate_pdf_buffer(inspection):
         p.drawString(50, y_pos, "Accessories Checklist:")
         y_pos -= 20
         
-        # Table header
+        # Table header (2 columns: Item and Remarks)
         p.setFont("Helvetica-Bold", 9)
         p.setFillColorRGB(0.9, 0.9, 0.9)
         p.rect(50, y_pos - 15, 500, 15, fill=1)
         p.setFillColorRGB(0, 0, 0)
         p.drawString(55, y_pos - 12, "Item")
-        p.drawString(200, y_pos - 12, "Status")
-        p.drawString(280, y_pos - 12, "Remarks")
+        p.drawString(250, y_pos - 12, "Remarks")
         y_pos -= 15
         
         # Table rows
@@ -217,20 +216,10 @@ def generate_pdf_buffer(inspection):
                 y_pos = height - 50
             
             p.rect(50, y_pos - 15, 500, 15)
-            p.drawString(55, y_pos - 12, str(acc.get('name', ''))[:25])
+            p.drawString(55, y_pos - 12, str(acc.get('name', ''))[:30])
             
-            status = acc.get('status', 'OK')
-            if status == 'Not OK':
-                p.setFillColorRGB(1, 0, 0)
-            elif status == 'N/A':
-                p.setFillColorRGB(0.5, 0.5, 0.5)
-            else:
-                p.setFillColorRGB(0, 0.5, 0)
-            p.drawString(200, y_pos - 12, status)
-            p.setFillColorRGB(0, 0, 0)
-            
-            comment = str(acc.get('comment', ''))[:50]
-            p.drawString(280, y_pos - 12, comment)
+            comment = str(acc.get('comment', ''))[:65]
+            p.drawString(250, y_pos - 12, comment)
             y_pos -= 15
         
         y_pos -= 10

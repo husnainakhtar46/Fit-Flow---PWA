@@ -279,25 +279,18 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                     </Text>
                 </View>
 
-                {/* Accessories Checklist */}
                 {data.accessories_data && data.accessories_data.length > 0 && (
                     <View>
                         <Text style={styles.sectionTitle}>Accessories Checklist:</Text>
                         <View style={styles.accTable}>
                             <View style={styles.accRow}>
-                                <Text style={[styles.accHeader, { width: '40%' }]}>Item</Text>
-                                <Text style={[styles.accHeader, { width: '20%' }]}>Status</Text>
-                                <Text style={[styles.accHeader, { width: '40%' }]}>Remarks</Text>
+                                <Text style={[styles.accHeader, { width: '50%' }]}>Item</Text>
+                                <Text style={[styles.accHeader, { width: '50%' }]}>Remarks</Text>
                             </View>
                             {data.accessories_data.map((item: any, i: number) => (
                                 <View key={i} style={styles.accRow}>
-                                    <Text style={[styles.accCell, { width: '40%' }]}>{item.name}</Text>
-                                    <View style={[styles.accCell, { width: '20%' }]}>
-                                        <Text style={item.status === 'Not OK' ? styles.red : styles.green}>
-                                            {item.status}
-                                        </Text>
-                                    </View>
-                                    <Text style={[styles.accCell, { width: '40%' }]}>{item.comment}</Text>
+                                    <Text style={[styles.accCell, { width: '50%' }]}>{item.name}</Text>
+                                    <Text style={[styles.accCell, { width: '50%' }]}>{item.comment}</Text>
                                 </View>
                             ))}
                         </View>
