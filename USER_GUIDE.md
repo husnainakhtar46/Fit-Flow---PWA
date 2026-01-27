@@ -194,7 +194,7 @@ This is the core feature for creating and managing quality inspection reports.
 - **Color:** Garment color *(optional)*
 - **PO Number:** Purchase order number *(required)*
 - **Stage:** Inspection stage (SMS, Size Set, TOP, Shipment, etc.)
-- **Decision:** Inspection result (Accepted, Rejected, Represent)
+- **Decision:** Inspection result (Accepted, Rejected, Represent) *(Mandatory)*
 - **Customer:** Select from dropdown *(required)*
 - **Template:** Select measurement template *(required)*
 
@@ -209,10 +209,18 @@ This is the core feature for creating and managing quality inspection reports.
 - **QA Workmanship Comments:** Construction quality notes
 - **QA Wash Comments:** Wash/color assessment
 - **QA Fabric Comments:** Fabric quality notes
-- **QA Accessories Comments:** Trims and accessories notes
-- **Final Remarks:** Overall summary
+**Accessories Checklist:**
+- Dedicated checklist with 17 common presets (Buttons, Zippers, Labels, etc.)
+- Check the box to include an accessory
+- Provide specific comments for each selected item
+- Add custom accessories as needed using the "Add Custom Item" button
 
-4. Click **"Create Inspection"**
+4. Click **"Save Evaluation"** (The system will prevent saving if no decision is selected)
+
+#### Closing the Form
+- Click the **Red Close Button (X)** at the top right to exit
+- A confirmation dialog will appear to prevent accidental data loss
+- Confirm **"Yes, Close"** to discard unsaved changes and close the form
 
 #### Uploading Images
 
@@ -492,8 +500,8 @@ For technical support or questions:
 
 ---
 
-**Version:** 1.0  
-**Last Updated:** November 2025
+**Version:** 1.1  
+**Last Updated:** January 2026
 
 ---
 

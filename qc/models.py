@@ -147,6 +147,7 @@ class Inspection(models.Model):
     accessories_data = models.JSONField(default=list, blank=True)
 
     # General Remarks
+    # this field is for Miscellaneous comments
     remarks = models.TextField(blank=True, verbose_name="General Remarks")
     
     # Customer Feedback Fields
@@ -180,7 +181,7 @@ class Measurement(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="OK")
 
     def __str__(self):
-        return f"{self.pom_name_name} - {self.inspection.style}"
+        return f"{self.pom_name} - {self.inspection.style}"
 
 class InspectionImage(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

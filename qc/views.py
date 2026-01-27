@@ -20,6 +20,7 @@ from django.db.models import Prefetch
 from .filters import InspectionFilter
 from .services.pdf_generator import generate_pdf_buffer, generate_final_inspection_pdf
 from .permissions import CanEditEvaluation, CanEditFinalInspection, CanCreateInspection, CanAddCustomerFeedback, IsQualityHeadOrAdmin
+from .utils import process_and_compress_image
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -74,44 +75,15 @@ class InspectionViewSet(viewsets.ModelViewSet):
             return Response({"error": "No image provided"}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            # Open and compress the image
-            with PILImage.open(image_file) as img:
-                # Convert RGBA/P to RGB for WebP compatibility
-                if img.mode in ("RGBA", "P", "LA"):
-                    # Create white background for transparency
-                    rgb_img = PILImage.new("RGB", img.size, (255, 255, 255))
-                    if img.mode == "P":
-                        img = img.convert("RGBA")
-                    rgb_img.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
-                    img = rgb_img
-                elif img.mode != "RGB":
-                    img = img.convert("RGB")
-                
-                # Resize to max 1600x1600 (maintains aspect ratio)
-                img.thumbnail((1600, 1600), PILImage.Resampling.LANCZOS)
-                
-                # Save as WebP with quality 85
-                compressed_buffer = io.BytesIO()
-                img.save(compressed_buffer, format='WEBP', quality=85, method=6)
-                compressed_buffer.seek(0)
-                
-                # Create filename with .webp extension
-                original_name = image_file.name.rsplit('.', 1)[0] if '.' in image_file.name else image_file.name
-                webp_filename = f"{original_name}.webp"
-                
-                # Create Django File object
-                from django.core.files.base import ContentFile
-                compressed_file = ContentFile(compressed_buffer.read(), name=webp_filename)
-                
-                InspectionImage.objects.create(
-                    inspection=inspection,
-                    image=compressed_file,
-                    caption=caption
-                )
-                return Response({"status": "Image uploaded and compressed"}, status=status.HTTP_201_CREATED)
-                
-        except Exception as e:
-            return Response({"error": f"Image processing failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            compressed_file, _ = process_and_compress_image(image_file)
+            InspectionImage.objects.create(
+                inspection=inspection,
+                image=compressed_file,
+                caption=caption
+            )
+            return Response({"status": "Image uploaded and compressed"}, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
     def send_email(self, request, pk=None):
@@ -168,8 +140,8 @@ class InspectionViewSet(viewsets.ModelViewSet):
         for field, value in data.items():
             setattr(inspection, field, value)
         
-        # Auto-set feedback date
-        inspection.customer_feedback_date = timezone.now().date()
+        # Auto-set feedback date (use full datetime for precision)
+        inspection.customer_feedback_date = timezone.now()
         inspection.save()
         
         return Response({
@@ -395,48 +367,20 @@ class FinalInspectionViewSet(viewsets.ModelViewSet):
             return Response({'error': 'No image provided'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            # Open and compress the image
-            with PILImage.open(image_file) as img:
-                # Convert RGBA/P to RGB for WebP compatibility
-                if img.mode in ('RGBA', 'P', 'LA'):
-                    rgb_img = PILImage.new('RGB', img.size, (255, 255, 255))
-                    if img.mode == 'P':
-                        img = img.convert('RGBA')
-                    rgb_img.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
-                    img = rgb_img
-                elif img.mode != 'RGB':
-                    img = img.convert('RGB')
-                
-                # Resize to max 1600x1600
-                img.thumbnail((1600, 1600), PILImage.Resampling.LANCZOS)
-                
-                # Save as WebP with quality 85
-                compressed_buffer = io.BytesIO()
-                img.save(compressed_buffer, format='WEBP', quality=85, method=6)
-                compressed_buffer.seek(0)
-                
-                # Create filename
-                original_name = image_file.name.rsplit('.', 1)[0] if '.' in image_file.name else image_file.name
-                webp_filename = f"{original_name}.webp"
-                
-                # Create Django File object
-                from django.core.files.base import ContentFile
-                compressed_file = ContentFile(compressed_buffer.read(), name=webp_filename)
-                
-                # Create image record
-                img_obj = FinalInspectionImage.objects.create(
-                    final_inspection=final_inspection,
-                    image=compressed_file,
-                    caption=caption,
-                    category=category,
-                    order=int(order)
-                )
-                
-                serializer = FinalInspectionImageSerializer(img_obj)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-                
-        except Exception as e:
-            return Response({'error': f'Image processing failed: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            compressed_file, _ = process_and_compress_image(image_file)
+            
+            img_obj = FinalInspectionImage.objects.create(
+                final_inspection=final_inspection,
+                image=compressed_file,
+                caption=caption,
+                category=category,
+                order=int(order)
+            )
+            
+            serializer = FinalInspectionImageSerializer(img_obj)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['post'])
     def calculate_aql(self, request):
