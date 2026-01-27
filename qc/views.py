@@ -157,6 +157,12 @@ class CustomerViewSet(viewsets.ModelViewSet):
     serializer_class = CustomerSerializer
     permission_classes = [IsQualityHeadOrAdmin]
     
+    def get_queryset(self):
+        print(f"DEBUG: CustomerViewSet.get_queryset called by user: {self.request.user}")
+        qs = Customer.objects.all()
+        print(f"DEBUG: Customer Count in DB: {qs.count()}")
+        return qs
+    
     @action(detail=True, methods=["post"])
     def add_email(self, request, pk=None):
         customer = self.get_object()

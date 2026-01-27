@@ -1,9 +1,9 @@
 # qc/serializers.py
 from rest_framework import serializers
 from .models import (
-    Customer, CustomerEmail, Template, TemplatePOM, Inspection, Measurement, InspectionImage, FilterPreset,
+    Customer, CustomerEmail, Template, TemplatePOM, Inspection, Measurement, MeasurementSample, InspectionImage, FilterPreset,
     FinalInspection, FinalInspectionDefect, FinalInspectionSizeCheck, FinalInspectionImage,
-    FinalInspectionMeasurement
+    FinalInspectionMeasurement, FinalInspectionMeasurementSample
 )
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
@@ -66,10 +66,18 @@ class TemplateSerializer(serializers.ModelSerializer):
                 )
         return instance
 
+class MeasurementSampleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MeasurementSample
+        fields = ['id', 'index', 'value']
+
+
 class MeasurementSerializer(serializers.ModelSerializer):
+    samples = MeasurementSampleSerializer(many=True, required=False)
+
     class Meta:
         model = Measurement
-        fields = ["id","pom_name","tol","std","s1","s2","s3","s4","s5","s6","status"]
+        fields = ['id', 'pom_name', 'tol', 'std', 'status', 'samples']
 
 class InspectionImageSerializer(serializers.ModelSerializer):
     class Meta:
@@ -137,8 +145,11 @@ class InspectionSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         measurements_data = validated_data.pop("measurements", [])
         inspection = Inspection.objects.create(**validated_data)
-        for m in measurements_data:
-            Measurement.objects.create(inspection=inspection, **m)
+        for m_data in measurements_data:
+            samples_data = m_data.pop("samples", [])
+            measurement = Measurement.objects.create(inspection=inspection, **m_data)
+            for s_data in samples_data:
+                MeasurementSample.objects.create(measurement=measurement, **s_data)
         return inspection
 
     def update(self, instance, validated_data):
@@ -151,10 +162,14 @@ class InspectionSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+        
         if measurements_data is not None:
             instance.measurements.all().delete()
-            for m in measurements_data:
-                Measurement.objects.create(inspection=instance, **m)
+            for m_data in measurements_data:
+                samples_data = m_data.pop("samples", [])
+                measurement = Measurement.objects.create(inspection=instance, **m_data)
+                for s_data in samples_data:
+                    MeasurementSample.objects.create(measurement=measurement, **s_data)
         return instance
 
 class FilterPresetSerializer(serializers.ModelSerializer):
@@ -164,10 +179,18 @@ class FilterPresetSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 # ==================== Final Inspection Serializers ====================
+class FinalInspectionMeasurementSampleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FinalInspectionMeasurementSample
+        fields = ['id', 'index', 'value']
+
+
 class FinalInspectionMeasurementSerializer(serializers.ModelSerializer):
+    samples = FinalInspectionMeasurementSampleSerializer(many=True, required=False)
+
     class Meta:
         model = FinalInspectionMeasurement
-        fields = ['id', 'pom_name', 'tol', 'spec', 'size_name', 's1', 's2', 's3', 's4', 's5', 's6']
+        fields = ['id', 'pom_name', 'tol', 'spec', 'size_name', 'samples']
 
 class FinalInspectionDefectSerializer(serializers.ModelSerializer):
     class Meta:
@@ -260,12 +283,15 @@ class FinalInspectionSerializer(serializers.ModelSerializer):
                 **size_check_data
             )
 
-        # Create nested measurements
-        for measurement_data in measurements_data:
-            FinalInspectionMeasurement.objects.create(
+        # Create nested measurements with samples
+        for m_data in measurements_data:
+            samples_data = m_data.pop('samples', [])
+            measurement = FinalInspectionMeasurement.objects.create(
                 final_inspection=final_inspection,
-                **measurement_data
+                **m_data
             )
+            for s_data in samples_data:
+                FinalInspectionMeasurementSample.objects.create(measurement=measurement, **s_data)
         
         return final_inspection
     
@@ -298,13 +324,16 @@ class FinalInspectionSerializer(serializers.ModelSerializer):
                     **size_check_data
                 )
 
-        # Update measurements if provided
+        # Update measurements with samples if provided
         if measurements_data is not None:
             instance.measurements.all().delete()
-            for measurement_data in measurements_data:
-                FinalInspectionMeasurement.objects.create(
+            for m_data in measurements_data:
+                samples_data = m_data.pop('samples', [])
+                measurement = FinalInspectionMeasurement.objects.create(
                     final_inspection=instance,
-                    **measurement_data
+                    **m_data
                 )
+                for s_data in samples_data:
+                    FinalInspectionMeasurementSample.objects.create(measurement=measurement, **s_data)
         
         return instance

@@ -202,25 +202,30 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                         <Text style={[styles.tableColHeader, styles.colPom]}>POM</Text>
                         <Text style={[styles.tableColHeader, styles.colStd]}>Tol</Text>
                         <Text style={[styles.tableColHeader, styles.colStd]}>Std</Text>
-                        <Text style={[styles.tableColHeader, styles.colStd]}>S1</Text>
-                        <Text style={[styles.tableColHeader, styles.colStd]}>S2</Text>
-                        <Text style={[styles.tableColHeader, styles.colStd]}>S3</Text>
-                        <Text style={[styles.tableColHeader, styles.colStd]}>S4</Text>
-                        <Text style={[styles.tableColHeader, styles.colStd]}>S5</Text>
-                        <Text style={[styles.tableColHeader, styles.colStd]}>S6</Text>
+                        {Array.from({ length: Math.max(3, ...data.measurements?.map((m: any) => m.samples?.length || 0) || [3]) }, (_, i) => (
+                            <Text key={i} style={[styles.tableColHeader, styles.colStd]}>S{i + 1}</Text>
+                        ))}
                     </View>
-                    {data.measurements?.map((m: any, i: number) => (
-                        <View key={i} style={styles.tableRow}>
-                            <Text style={[styles.tableCol, styles.colPom]}>{m.pom_name}</Text>
-                            <Text style={[styles.tableCol, styles.colStd]}>{m.tol}</Text>
-                            <Text style={[styles.tableCol, styles.colStd]}>{m.std || '-'}</Text>
-                            {['s1', 's2', 's3', 's4', 's5', 's6'].map((k) => (
-                                <Text key={k} style={[styles.tableCol, styles.colStd, isOutOfTolerance(m[k], m.std, m.tol) ? styles.red : {}]}>
-                                    {m[k] || '-'}
-                                </Text>
-                            ))}
-                        </View>
-                    ))}
+                    {data.measurements?.map((m: any, i: number) => {
+                        const maxSamples = Math.max(3, ...data.measurements?.map((meas: any) => meas.samples?.length || 0) || [3]);
+                        const samples = m.samples || [];
+                        return (
+                            <View key={i} style={styles.tableRow}>
+                                <Text style={[styles.tableCol, styles.colPom]}>{m.pom_name}</Text>
+                                <Text style={[styles.tableCol, styles.colStd]}>{m.tol}</Text>
+                                <Text style={[styles.tableCol, styles.colStd]}>{m.std || '-'}</Text>
+                                {Array.from({ length: maxSamples }, (_, idx) => {
+                                    const sample = samples.find((s: any) => s.index === idx + 1);
+                                    const val = sample?.value;
+                                    return (
+                                        <Text key={idx} style={[styles.tableCol, styles.colStd, isOutOfTolerance(val, m.std, m.tol) ? styles.red : {}]}>
+                                            {val || '-'}
+                                        </Text>
+                                    );
+                                })}
+                            </View>
+                        );
+                    })}
                 </View>
 
                 {/* Evaluation Comments (Comparison) */}

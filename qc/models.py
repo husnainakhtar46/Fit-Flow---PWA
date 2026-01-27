@@ -163,25 +163,36 @@ class Inspection(models.Model):
         return f"{self.style} - {self.color} ({self.created_at.date()})"
 
 class Measurement(models.Model):
+    """Measurement row for a POM (Point of Measure) in an Inspection."""
     STATUS_CHOICES = [("OK","OK"), ("FAIL","FAIL")]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     inspection = models.ForeignKey(Inspection, related_name="measurements", on_delete=models.CASCADE)
     pom_name = models.CharField(max_length=255)
     tol = models.FloatField(default=0.0)
-    std = models.FloatField(null=True, blank=True) # Changed to allow empty
-    
-    # Expanded to 6 samples
-    s1 = models.FloatField(null=True, blank=True)
-    s2 = models.FloatField(null=True, blank=True)
-    s3 = models.FloatField(null=True, blank=True)
-    s4 = models.FloatField(null=True, blank=True)
-    s5 = models.FloatField(null=True, blank=True)
-    s6 = models.FloatField(null=True, blank=True)
-    
+    std = models.FloatField(null=True, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="OK")
 
     def __str__(self):
         return f"{self.pom_name} - {self.inspection.style}"
+
+
+class MeasurementSample(models.Model):
+    """Dynamic sample value linked to a Measurement."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    measurement = models.ForeignKey(
+        Measurement, 
+        related_name='samples', 
+        on_delete=models.CASCADE
+    )
+    index = models.PositiveIntegerField(help_text="Sample number (1, 2, 3...)")
+    value = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['index']
+        unique_together = ['measurement', 'index']
+
+    def __str__(self):
+        return f"S{self.index}: {self.value}"
 
 class InspectionImage(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -547,17 +558,12 @@ class FinalInspectionImage(models.Model):
 
 
 class FinalInspectionMeasurement(models.Model):
+    """Measurement row for a POM in a Final Inspection."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     final_inspection = models.ForeignKey(FinalInspection, related_name='measurements', on_delete=models.CASCADE)
     pom_name = models.CharField(max_length=255)
     tol = models.FloatField(default=0.0)
-    spec = models.FloatField(default=0.0) # User editable standard
-    s1 = models.CharField(max_length=50, blank=True)
-    s2 = models.CharField(max_length=50, blank=True)
-    s3 = models.CharField(max_length=50, blank=True)
-    s4 = models.CharField(max_length=50, blank=True)
-    s5 = models.CharField(max_length=50, blank=True)
-    s6 = models.CharField(max_length=50, blank=True)
+    spec = models.FloatField(default=0.0)
     size_name = models.CharField(max_length=50, blank=True)
 
     def __str__(self):
@@ -565,3 +571,22 @@ class FinalInspectionMeasurement(models.Model):
 
     class Meta:
         ordering = ['id']
+
+
+class FinalInspectionMeasurementSample(models.Model):
+    """Dynamic sample value linked to a FinalInspectionMeasurement."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    measurement = models.ForeignKey(
+        FinalInspectionMeasurement, 
+        related_name='samples', 
+        on_delete=models.CASCADE
+    )
+    index = models.PositiveIntegerField(help_text="Sample number (1, 2, 3...)")
+    value = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['index']
+        unique_together = ['measurement', 'index']
+
+    def __str__(self):
+        return f"S{self.index}: {self.value}"

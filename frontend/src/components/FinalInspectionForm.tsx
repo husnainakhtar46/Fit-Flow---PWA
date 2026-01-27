@@ -57,16 +57,16 @@ interface SizeCheck {
   packed_qty: number;
 }
 
+interface MeasurementSample {
+  index: number;
+  value: number | string | null;
+}
+
 interface MeasurementInput {
   pom_name: string;
   spec: number;
   tol: number;
-  s1: string;
-  s2: string;
-  s3: string;
-  s4: string;
-  s5: string;
-  s6: string;
+  samples: MeasurementSample[];
   size_name: string;
   size_field_id?: string;
 }
@@ -116,7 +116,17 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [isDragSelecting, setIsDragSelecting] = useState(false);
   const [dragStart, setDragStart] = useState<{ r: number, c: number } | null>(null);
-  const columnKeys = ['spec', 's1', 's2', 's3', 's4', 's5', 's6'];
+
+  // Dynamic sample count (default 6 for final inspections)
+  const [sampleCount, setSampleCount] = useState(6);
+  const columnKeys = ['spec', ...Array.from({ length: sampleCount }, (_, i) => `s${i + 1}`)];
+
+  // Helper to get sample value from measurement
+  const getSampleValue = (m: MeasurementInput, sampleIndex: number): number | string | null => {
+    const sample = m.samples?.find(s => s.index === sampleIndex);
+    return sample?.value ?? '';
+  };
+
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   // --- Queries with Local Caching ---
@@ -310,7 +320,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
             tol: pom.default_tol,
             size_name: sizeName,
             size_field_id: fieldId, // Link by ID
-            s1: '', s2: '', s3: '', s4: '', s5: '', s6: ''
+            samples: Array.from({ length: sampleCount }, (_, i) => ({ index: i + 1, value: '' }))
           });
         });
         hasChanges = true;
@@ -490,14 +500,57 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
       if (selectedCells.size > 0) {
         if (selectedCells.has(getCellId(index, key)) || selectedCells.size > 0) {
           e.preventDefault();
-          let count = 0;
+
+          // Confirmation for bulk delete
+          if (selectedCells.size > 1) {
+            if (!confirm(`Are you sure you want to clear ${selectedCells.size} cells?`)) {
+              return;
+            }
+          }
+
+          // Group deletions by row to handle sample arrays correctly
+          const rowsToUpdate = new Map<number, Set<string>>();
           selectedCells.forEach(cellId => {
             const [rStr, k] = cellId.split('-');
             const r = parseInt(rStr);
-            // We need to use setValue from useForm
-            setValue(`measurements.${r}.${k}` as any, '');
-            count++;
+            if (!rowsToUpdate.has(r)) rowsToUpdate.set(r, new Set());
+            rowsToUpdate.get(r)!.add(k);
           });
+
+          const currentMeasurements = getValues('measurements');
+          let count = 0;
+
+          rowsToUpdate.forEach((keys, r) => {
+            if (r >= currentMeasurements.length) return;
+
+            // We need to clone the samples array to avoid direct mutation issues
+            let rowSamples = [...(currentMeasurements[r].samples || [])];
+            let samplesChanged = false;
+
+            keys.forEach(k => {
+              if (k === 'std' || k === 'tol' || k === 'spec') {
+                setValue(`measurements.${r}.${k}` as any, '');
+                count++;
+              } else if (k.startsWith('s')) {
+                // Handle sample deletion
+                const sampleNum = parseInt(k.replace('s', ''));
+                const existingIdx = rowSamples.findIndex(s => s.index === sampleNum);
+
+                if (existingIdx >= 0) {
+                  // Update existing sample to empty string
+                  rowSamples[existingIdx] = { ...rowSamples[existingIdx], value: '' };
+                  samplesChanged = true;
+                  count++;
+                }
+              }
+            });
+
+            // Only update samples array if changes were made
+            if (samplesChanged) {
+              setValue(`measurements.${r}.samples` as any, rowSamples);
+            }
+          });
+
           if (count > 0) {
             toast({ title: `Cleared ${count} cells` });
           }
@@ -569,6 +622,65 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   };
 
+  // Multi-cell Copy Handler
+  const handleCopy = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    // Only override if we have a multi-cell selection
+    if (selectedCells.size === 0) return;
+
+    event.preventDefault();
+
+    // 1. Gather all selected data
+    const cellsToCopy: { r: number, c: number, val: string }[] = [];
+    const currentMeasurements = getValues('measurements');
+
+    selectedCells.forEach(cellId => {
+      const [rStr, key] = cellId.split('-');
+      const r = parseInt(rStr);
+      const c = columnKeys.indexOf(key);
+
+      if (r >= 0 && r < currentMeasurements.length && c !== -1) {
+        let val = '';
+        if (key === 'spec') {
+          val = String(currentMeasurements[r]?.spec ?? '');
+        } else if (key.startsWith('s')) {
+          const sampleNum = parseInt(key.replace('s', ''));
+          const sample = currentMeasurements[r]?.samples?.find((s: any) => s.index === sampleNum);
+          val = String(sample?.value ?? '');
+        }
+        cellsToCopy.push({ r, c, val });
+      }
+    });
+
+    if (cellsToCopy.length === 0) return;
+
+    // 2. Sort by Row then Column to order them correctly
+    cellsToCopy.sort((a, b) => {
+      if (a.r !== b.r) return a.r - b.r; // Top to bottom
+      return a.c - b.c; // Left to right
+    });
+
+    // 3. Construct Grid String (TSV)
+    const uniqueRows = [...new Set(cellsToCopy.map(x => x.r))].sort((a, b) => a - b);
+    const uniqueCols = [...new Set(cellsToCopy.map(x => x.c))].sort((a, b) => a - b);
+
+    let clipboardString = "";
+
+    uniqueRows.forEach((rowIndex, i) => {
+      const rowCells = cellsToCopy.filter(c => c.r === rowIndex);
+      const rowStr = uniqueCols.map(colIndex => {
+        const cell = rowCells.find(c => c.c === colIndex);
+        return cell ? cell.val : '';
+      }).join('\t');
+
+      clipboardString += rowStr;
+      if (i < uniqueRows.length - 1) clipboardString += '\n';
+    });
+
+    // 4. Write to clipboard
+    event.clipboardData.setData('text/plain', clipboardString);
+    toast({ title: `Copied ${cellsToCopy.length} cells` });
+  };
+
   // Paste Handler
   const handleMeasurementPaste = (rowIndex: number, startColumn: string) => (event: React.ClipboardEvent<HTMLInputElement>) => {
     const pastedData = event.clipboardData.getData('text');
@@ -592,17 +704,45 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
         return;
       }
 
+      // Paste data starting from the exact cell
       dataRows.forEach((line, rowOffset) => {
         const targetRow = rowIndex + rowOffset;
         if (targetRow < measurementFields.length) {
           const columns = line.split('\t');
+
+          // Get current samples to modify
+          const currentMeasurements = getValues('measurements');
+          let rowSamples = [...(currentMeasurements[targetRow].samples || [])];
+          let rowChanged = false;
+
           columns.forEach((value, colOffset) => {
             const targetColIndex = startColIndex + colOffset;
             if (targetColIndex < columnKeys.length) {
               const fieldName = columnKeys[targetColIndex];
-              setValue(`measurements.${targetRow}.${fieldName}` as any, value?.trim() || '');
+              const cleanValue = value?.trim() || '';
+
+              // Check if it's a sample column (s1, s2...)
+              const sampleMatch = fieldName.match(/^s(\d+)$/);
+              if (sampleMatch) {
+                const sampleIndex = parseInt(sampleMatch[1]);
+                const existingIdx = rowSamples.findIndex(s => s.index === sampleIndex);
+                if (existingIdx >= 0) {
+                  rowSamples[existingIdx] = { ...rowSamples[existingIdx], value: cleanValue };
+                } else {
+                  rowSamples.push({ index: sampleIndex, value: cleanValue });
+                }
+                rowChanged = true;
+              } else {
+                // Standard field (spec, tol, etc)
+                setValue(`measurements.${targetRow}.${fieldName}` as any, cleanValue);
+              }
             }
           });
+
+          // After processing all columns for this row, update the samples array if changed
+          if (rowChanged) {
+            setValue(`measurements.${targetRow}.samples` as any, rowSamples);
+          }
         }
       });
       toast({ title: `Pasted ${affectedRows} rows` });
@@ -641,10 +781,14 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
       // Clean up measurements
       const measurements = data.measurements.map(m => ({
-        ...m,
+        pom_name: m.pom_name,
         spec: isNaN(Number(m.spec)) ? 0 : Number(m.spec),
-        s1: m.s1 || '', s2: m.s2 || '', s3: m.s3 || '',
-        s4: m.s4 || '', s5: m.s5 || '', s6: m.s6 || ''
+        tol: m.tol,
+        size_name: m.size_name,
+        samples: (m.samples || []).map(s => ({
+          index: s.index,
+          value: s.value === '' ? null : parseFloat(String(s.value)) || null
+        }))
       }));
 
       const payload = { ...data, defects, measurements };
@@ -693,11 +837,14 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
       // Clean up measurements
       const measurements = data.measurements.map(m => ({
-        ...m,
+        pom_name: m.pom_name,
         spec: isNaN(Number(m.spec)) ? 0 : Number(m.spec),
         tol: isNaN(Number(m.tol)) ? 0 : Number(m.tol),
-        s1: m.s1 || '', s2: m.s2 || '', s3: m.s3 || '',
-        s4: m.s4 || '', s5: m.s5 || '', s6: m.s6 || '',
+        size_name: m.size_name,
+        samples: (m.samples || []).map(s => ({
+          index: s.index,
+          value: s.value === '' ? null : parseFloat(String(s.value)) || null
+        }))
       }));
 
       const payload = { ...data, defects, measurements };
@@ -750,10 +897,14 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
     // Clean up measurements
     const measurementsPayload = data.measurements.map(m => ({
-      ...m,
+      pom_name: m.pom_name,
       spec: isNaN(Number(m.spec)) ? 0 : Number(m.spec),
-      s1: m.s1 || '', s2: m.s2 || '', s3: m.s3 || '',
-      s4: m.s4 || '', s5: m.s5 || '', s6: m.s6 || ''
+      tol: m.tol,
+      size_name: m.size_name,
+      samples: (m.samples || []).map(s => ({
+        index: s.index,
+        value: s.value === '' ? null : parseFloat(String(s.value)) || null
+      }))
     }));
 
     const finalPayload = {
@@ -1025,38 +1176,64 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
                       <span className="font-bold text-lg text-blue-800">{sizeName}</span>
                     </AccordionTrigger>
                     <AccordionContent className="p-2 border rounded-b-md border-t-0">
+                      <div className="flex items-center justify-between mb-2 px-2">
+                        <span className="text-sm text-gray-500">Measurements (Hold & Drag to Select • Delete to Clear)</span>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSampleCount(Math.max(1, sampleCount - 1))}
+                            disabled={sampleCount <= 1}
+                          >
+                            - Sample
+                          </Button>
+                          <span className="px-2 py-1 text-sm font-medium">{sampleCount} Samples</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSampleCount(Math.max(6, Math.min(20, sampleCount + 1)))}
+                            disabled={sampleCount >= 20}
+                          >
+                            + Sample
+                          </Button>
+                        </div>
+                      </div>
+
                       <div className="overflow-x-auto">
-                        <div className="min-w-[900px] grid grid-cols-11 gap-2 mb-2 font-bold text-xs text-gray-600 uppercase text-center bg-gray-50 p-2 rounded">
-                          <div className="col-span-2 text-left pl-2">POM</div>
-                          <div className="col-span-1">Tol</div>
-                          <div className="col-span-1">Std</div>
-                          <div className="col-span-1">S1</div>
-                          <div className="col-span-1">S2</div>
-                          <div className="col-span-1">S3</div>
-                          <div className="col-span-1">S4</div>
-                          <div className="col-span-1">S5</div>
-                          <div className="col-span-1">S6</div>
+                        <div className={`min-w-[900px] grid gap-2 mb-2 font-bold text-xs text-gray-600 uppercase text-center bg-gray-50 p-2 rounded`}
+                          style={{ gridTemplateColumns: `2fr 1fr 1fr ${Array(sampleCount).fill('1fr').join(' ')}` }}>
+                          <div className="text-left pl-2">POM</div>
+                          <div>Tol</div>
+                          <div>Std</div>
+                          {Array.from({ length: sampleCount }, (_, i) => (
+                            <div key={i}>S{i + 1}</div>
+                          ))}
                         </div>
 
                         {sizeMeasurements.map(({ field, index }) => {
-                          const currentPOM = measurements[index] || {};
+                          const currentPOM = measurements[index] || { samples: [] };
                           // Extract indices for scoped navigation
                           const sizeMeasurementIndices = sizeMeasurements.map(sm => sm.index);
 
                           return (
-                            <div key={field.id} className="min-w-[900px] grid grid-cols-11 gap-2 mb-2 items-center hover:bg-gray-50 p-1 rounded">
+                            <div key={field.id}
+                              className="min-w-[900px] grid gap-2 mb-2 items-center hover:bg-gray-50 p-1 rounded"
+                              style={{ gridTemplateColumns: `2fr 1fr 1fr ${Array(sampleCount).fill('1fr').join(' ')}` }}>
                               {/* Read-only POM Info */}
-                              <div className="col-span-2">
+                              <div>
                                 <Input {...register(`measurements.${index}.pom_name`)} readOnly className="bg-transparent border-none shadow-none h-8 font-medium text-sm" />
                               </div>
-                              <div className="col-span-1">
+                              <div>
                                 <Input {...register(`measurements.${index}.tol`)} readOnly className="bg-transparent border-none shadow-none h-8 text-center text-xs text-gray-500" />
                               </div>
-                              <div className="col-span-1">
+                              <div>
                                 <Input
                                   {...register(`measurements.${index}.spec`)}
                                   className={`h-8 text-center text-sm ${isSelected(index, 'spec') ? 'bg-blue-200 ring-2 ring-blue-500 z-10 relative' : ''}`}
                                   onPaste={handleMeasurementPaste(index, 'spec')}
+                                  onCopy={handleCopy}
                                   onKeyDown={(e) => handleCellKeyDown(e, index, 'spec', sizeMeasurementIndices)}
                                   onMouseDown={() => handleCellMouseDown(index, 'spec')}
                                   onMouseEnter={() => handleCellMouseEnter(index, 'spec')}
@@ -1066,22 +1243,36 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
                                 />
                               </div>
 
-                              {/* Measurement Inputs 1-6 */}
-                              {[1, 2, 3, 4, 5, 6].map((num) => {
-                                const key = `s${num}` as 's1' | 's2' | 's3' | 's4' | 's5' | 's6';
-                                const val = currentPOM[key];
-                                const isBad = isOutOfTolerance(val, currentPOM.spec, currentPOM.tol);
+                              {/* Dynamic Measurement Inputs */}
+                              {Array.from({ length: sampleCount }, (_, sampleIdx) => {
+                                const sampleNum = sampleIdx + 1;
+                                const key = `s${sampleNum}`;
+                                const sampleValue = getSampleValue(currentPOM as MeasurementInput, sampleNum);
+                                const isBad = isOutOfTolerance(sampleValue, currentPOM.spec, currentPOM.tol);
 
                                 return (
-                                  <div key={num} className="col-span-1">
+                                  <div key={sampleNum}>
                                     <Input
-                                      {...register(`measurements.${index}.${key}` as const)}
+                                      name={`measurements.${index}.${key}`} // Interaction fix: name required for querySelector navigation
+                                      type="number" step="0.1"
+                                      value={sampleValue ?? ''}
+                                      onChange={(e) => {
+                                        const newSamples = [...(currentPOM.samples || [])];
+                                        const existingIdx = newSamples.findIndex(s => s.index === sampleNum);
+                                        if (existingIdx >= 0) {
+                                          newSamples[existingIdx] = { index: sampleNum, value: e.target.value };
+                                        } else {
+                                          newSamples.push({ index: sampleNum, value: e.target.value });
+                                        }
+                                        setValue(`measurements.${index}.samples` as any, newSamples);
+                                      }}
                                       className={`h-8 text-center text-sm 
                                         ${isSelected(index, key) ? 'bg-blue-200 ring-2 ring-blue-500 z-10 relative' : ''} 
                                         ${!isSelected(index, key) && isBad ? 'bg-red-50 text-red-600 font-bold border-red-300' : ''}
                                       `}
                                       placeholder="-"
                                       onPaste={handleMeasurementPaste(index, key)}
+                                      onCopy={handleCopy}
                                       onKeyDown={(e) => handleCellKeyDown(e, index, key, sizeMeasurementIndices)}
                                       onMouseDown={() => handleCellMouseDown(index, key)}
                                       onMouseEnter={() => handleCellMouseEnter(index, key)}

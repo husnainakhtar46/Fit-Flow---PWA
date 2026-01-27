@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
+
 import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import axios from 'axios';
 import api from '../lib/api';
+
+const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
 import { useAuth } from '../lib/useAuth';
 import { db, cacheCustomers, cacheTemplates, getCachedCustomers, getCachedTemplates } from '../lib/db';
 import { pdf } from '@react-pdf/renderer';
@@ -34,6 +38,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogDescription,
 } from '../components/ui/dialog';
 import InspectionFilters from '../components/InspectionFilters';
 import SyncManager from '../components/SyncManager';
@@ -44,15 +49,16 @@ type ImageSlot = {
     caption: string;
 };
 
+type MeasurementSample = {
+    index: number;
+    value: number | string | null;
+};
+
 type Measurement = {
     pom_name: string;
     tol: number | string;
     std: number | string;
-    s1: number | string;
-    s2: number | string;
-    s3: number | string;
-    s4: number | string;
-    s5: number | string;
+    samples: MeasurementSample[];
 };
 
 type AccessoryItem = {
@@ -140,66 +146,101 @@ const EvaluationForm = () => {
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [isDragSelecting, setIsDragSelecting] = useState(false);
     const [dragStart, setDragStart] = useState<{ r: number, c: number } | null>(null);
-    const columnKeys = ['std', 's1', 's2', 's3', 's4', 's5', 's6'];
+
+    // Dynamic sample count (default 3 for evaluations)
+    const [sampleCount, setSampleCount] = useState(3);
+    const columnKeys = ['std', ...Array.from({ length: sampleCount }, (_, i) => `s${i + 1}`)];
+
+    // Helper to get sample value from measurement
+    const getSampleValue = (m: Measurement, sampleIndex: number): number | string | null => {
+        const sample = m.samples?.find(s => s.index === sampleIndex);
+        return sample?.value ?? '';
+    };
 
     const getCellId = (r: number, k: string) => `${r}-${k}`;
 
     // Handle Delete/Backspace
     // Handle KeyDown (Enter for Navigation, Backspace/Delete for Bulk Clear)
+    // Handle KeyDown (Enter/Arrows for Navigation, Backspace/Delete for Clear)
     const handleCellKeyDown = (e: React.KeyboardEvent, index: number, key: string) => {
-        // Handle Enter for Navigation
-        if (e.key === 'Enter') {
-            e.preventDefault(); // Prevent form submission
-
-            const currentColIdx = columnKeys.indexOf(key);
-            if (currentColIdx === -1) return;
-
-            // Try moving down (same column, next row)
+        // Navigation: Enter or ArrowDown -> Down
+        if (e.key === 'Enter' || e.key === 'ArrowDown') {
+            e.preventDefault();
             const nextRowIdx = index + 1;
             if (nextRowIdx < fields.length) {
                 const nextInput = document.querySelector(`input[name="measurements.${nextRowIdx}.${key}"]`) as HTMLInputElement;
-                if (nextInput) {
-                    nextInput.focus();
-                    nextInput.select(); // Optional: select content
-                }
-            } else {
-                // If at bottom, move to top of next column
-                const nextColIdx = currentColIdx + 1;
-                if (nextColIdx < columnKeys.length) {
-                    const nextColKey = columnKeys[nextColIdx];
-                    const nextInput = document.querySelector(`input[name="measurements.0.${nextColKey}"]`) as HTMLInputElement;
-                    if (nextInput) {
-                        nextInput.focus();
-                        nextInput.select(); // Optional: select content
-                    }
-                }
+                nextInput?.focus();
             }
             return;
         }
 
-        // If Backspace/Delete is pressed
-        if (e.key === 'Backspace' || e.key === 'Delete') {
-            // If we have a selection and the current cell is part of it (or just any selection exists)
-            if (selectedCells.size > 0) {
-                // Only prevent default if we are actually clearing multiple cells or the cell is in selection
-                // But for safety to avoid navigating back, we prevent default if selection exists
-                if (selectedCells.has(getCellId(index, key)) || selectedCells.size > 0) {
-                    // If it's just a single cursor in a cell without range selection, we might want to allow normal backspace?
-                    // But the user asked for "bulk delete". 
-                    // Let's keep existing logic: if selection > 0, clear all.
-                    e.preventDefault();
+        // Navigation: ArrowUp -> Up
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (index > 0) {
+                const prevInput = document.querySelector(`input[name="measurements.${index - 1}.${key}"]`) as HTMLInputElement;
+                prevInput?.focus();
+            }
+            return;
+        }
 
-                    let count = 0;
-                    selectedCells.forEach(cellId => {
-                        const [rStr, k] = cellId.split('-');
-                        const r = parseInt(rStr);
-                        setValue(`measurements.${r}.${k}` as any, '');
-                        count++;
+        // Deletion: Delete (Always clear) or Backspace (Clear if multi-select)
+        if (e.key === 'Delete' || (e.key === 'Backspace' && selectedCells.size > 1)) {
+            if (selectedCells.size > 0) {
+                e.preventDefault();
+
+                // Confirmation for bulk delete
+                if (selectedCells.size > 1) {
+                    if (!confirm(`Are you sure you want to clear ${selectedCells.size} cells?`)) {
+                        return;
+                    }
+                }
+
+                // Group deletions by row to handle sample arrays correctly
+                const rowsToUpdate = new Map<number, Set<string>>();
+                selectedCells.forEach(cellId => {
+                    const [rStr, k] = cellId.split('-');
+                    const r = parseInt(rStr);
+                    if (!rowsToUpdate.has(r)) rowsToUpdate.set(r, new Set());
+                    rowsToUpdate.get(r)!.add(k);
+                });
+
+                const currentMeasurements = getValues('measurements');
+                let count = 0;
+
+                rowsToUpdate.forEach((keys, r) => {
+                    if (r >= currentMeasurements.length) return;
+
+                    // We need to clone the samples array to avoid direct mutation issues
+                    let rowSamples = [...(currentMeasurements[r].samples || [])];
+                    let samplesChanged = false;
+
+                    keys.forEach(k => {
+                        if (k === 'std' || k === 'tol' || k === 'spec') {
+                            setValue(`measurements.${r}.${k}` as any, '');
+                            count++;
+                        } else if (k.startsWith('s')) {
+                            // Handle sample deletion
+                            const sampleNum = parseInt(k.replace('s', ''));
+                            const existingIdx = rowSamples.findIndex(s => s.index === sampleNum);
+
+                            if (existingIdx >= 0) {
+                                // Update existing sample to empty string (or null if preferred, but empty string for input)
+                                rowSamples[existingIdx] = { ...rowSamples[existingIdx], value: '' };
+                                samplesChanged = true;
+                                count++;
+                            }
+                        }
                     });
 
-                    if (count > 0) {
-                        toast.success(`Cleared ${count} cells`);
+                    // Only update samples array if changes were made
+                    if (samplesChanged) {
+                        setValue(`measurements.${r}.samples` as any, rowSamples);
                     }
+                });
+
+                if (count > 0) {
+                    toast.success(`Cleared ${count} cells`);
                 }
             }
         }
@@ -255,6 +296,8 @@ const EvaluationForm = () => {
 
     // Mobile: Long Press Logic
     const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+
+
 
     const handleTouchStart = (index: number, key: string) => {
         longPressTimer.current = setTimeout(() => {
@@ -312,26 +355,40 @@ const EvaluationForm = () => {
         placeholderData: (previousData) => previousData,
     });
 
-    const { data: customersData } = useQuery({
-        queryKey: ['customers'],
+    const { data: customersData, isLoading: isCustomersLoading } = useQuery({
+        queryKey: ['customers_v2'],
         queryFn: async () => {
             try {
-                const res = await api.get('/customers/');
-                const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
-                await cacheCustomers(data);
+                const token = localStorage.getItem('access_token');
+                const response = await axios.get(`${API_URL}/customers/`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                const data = Array.isArray(response.data) ? response.data : response.data?.results || [];
+
+                // Try caching but don't fail
+                try { await cacheCustomers(data); } catch (e) { console.warn('Cache fail', e); }
+
                 return data;
             } catch (error) {
-                console.warn('API failed, using cached customers');
-                return await getCachedCustomers() || [];
+                console.error('Fetch failed:', error);
+                const cached = await getCachedCustomers();
+                return cached || [];
             }
         },
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        refetchOnMount: 'always',
+        retry: 1,
     });
 
     const { data: templatesData } = useQuery({
         queryKey: ['templates'],
         queryFn: async () => {
             try {
-                const res = await api.get('/templates/');
+                const token = localStorage.getItem('access_token');
+                const res = await axios.get(`${API_URL}/templates/`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
                 const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
                 await cacheTemplates(data);
                 return data;
@@ -340,6 +397,9 @@ const EvaluationForm = () => {
                 return await getCachedTemplates() || [];
             }
         },
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 
     const customers = Array.isArray(customersData) ? customersData : [];
@@ -402,11 +462,18 @@ const EvaluationForm = () => {
                     pom_name: m.pom_name,
                     tol: m.tol,
                     std: m.std ?? '',
-                    s1: m.s1 ?? '', s2: m.s2 ?? '', s3: m.s3 ?? '',
-                    s4: m.s4 ?? '', s5: m.s5 ?? '', s6: m.s6 ?? '',
-                    status: 'OK'
+                    samples: (m.samples || []).map((s: any) => ({
+                        index: s.index,
+                        value: s.value ?? ''
+                    }))
                 }))
             });
+
+            // Set sample count based on loaded data
+            const maxSampleIndex = Math.max(3, ...data.measurements?.flatMap((m: any) =>
+                (m.samples || []).map((s: any) => s.index)
+            ) || [3]);
+            setSampleCount(maxSampleIndex);
 
             setImageSlots([{ file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }]);
             setShowSearchResults(false);
@@ -426,12 +493,14 @@ const EvaluationForm = () => {
                     pom_name: pom.name,
                     tol: pom.default_tol,
                     std: '',
-                    s1: '', s2: '', s3: '', s4: '', s5: '', s6: '',
-                    status: 'OK'
+                    samples: Array.from({ length: sampleCount }, (_, i) => ({
+                        index: i + 1,
+                        value: ''
+                    }))
                 })));
             }
         }
-    }, [selectedTemplate, templates, replace, isManualTemplateChange]);
+    }, [selectedTemplate, templates, replace, isManualTemplateChange, sampleCount]);
 
     // Paste handler for Excel/Sheets data - works like Excel paste
     const handleMeasurementPaste = (rowIndex: number, startColumn: string) => (event: React.ClipboardEvent<HTMLInputElement>) => {
@@ -448,14 +517,14 @@ const EvaluationForm = () => {
             // Get current measurements
             const currentMeasurements = getValues('measurements');
 
-            // Define column order for measurements
-            const columnOrder = ['std', 's1', 's2', 's3', 's4', 's5', 's6'];
+            // Use dynamic column order based on sampleCount
+            const columnOrder = columnKeys; // Already includes 'std' and 's1' through 's{sampleCount}'
             const startColIndex = columnOrder.indexOf(startColumn);
 
             if (startColIndex === -1) return; // Invalid column
 
-            // Auto-detect header row
-            const hasHeader = /pom|name|std|s1|s2|s3|s4|s5|s6/i.test(lines[0]);
+            // Auto-detect header row (flexible pattern)
+            const hasHeader = /pom|name|std|s\d+/i.test(lines[0]);
             const dataRows = hasHeader ? lines.slice(1) : lines;
 
             const affectedRows = Math.min(dataRows.length, currentMeasurements.length - rowIndex);
@@ -471,19 +540,115 @@ const EvaluationForm = () => {
                 if (targetRow < currentMeasurements.length) {
                     const columns = line.split('\t');
 
-                    // Paste each column starting from startColumn
+                    // We need to fetch the LATEST 'samples' for this row because we might be updating multiple columns in the same row loop
+                    // But getValues() returns the state at the start.
+                    // Actually, setValue updates the internal store.
+                    // However, constructing the samples array requires care if we update multiple samples in one row.
+                    // Better approach: Compute the new samples array fully for this row, then set it once?
+                    // Or read-modify-write per column?
+                    // Since setValue is synchronous in RHF for state updates (mostly), but we act in a loop...
+                    // Let's get the current object from the array we grabbed at start, modify it if needed?
+                    // No, getValues('measurements') returns a snapshot.
+                    // We should probably rely on the existing measurement object from snapshot, modify it in place, then setValue?
+                    // Be careful with object references.
+
+                    let rowSamples = [...(currentMeasurements[targetRow].samples || [])];
+
                     columns.forEach((value, colOffset) => {
                         const targetColIndex = startColIndex + colOffset;
                         if (targetColIndex < columnOrder.length) {
                             const fieldName = columnOrder[targetColIndex];
-                            setValue(`measurements.${targetRow}.${fieldName}` as any, value?.trim() || '');
+                            const cleanValue = value?.trim() || '';
+
+                            // Check if it's a sample column (s1, s2...)
+                            const sampleMatch = fieldName.match(/^s(\d+)$/);
+                            if (sampleMatch) {
+                                const sampleIndex = parseInt(sampleMatch[1]);
+                                const existingIdx = rowSamples.findIndex(s => s.index === sampleIndex);
+                                if (existingIdx >= 0) {
+                                    rowSamples[existingIdx] = { ...rowSamples[existingIdx], value: cleanValue };
+                                } else {
+                                    rowSamples.push({ index: sampleIndex, value: cleanValue });
+                                }
+                            } else {
+                                // Standard field (std, tol, etc)
+                                setValue(`measurements.${targetRow}.${fieldName}` as any, cleanValue);
+                            }
                         }
                     });
+
+                    // After processing all columns for this row, update the samples array if changed
+                    setValue(`measurements.${targetRow}.samples` as any, rowSamples);
                 }
             });
 
             toast.success(`Pasted ${affectedRows} row(s) starting from ${startColumn.toUpperCase()} at row ${rowIndex + 1}!`);
         }
+    };
+
+    // Multi-cell Copy Handler
+    const handleCopy = (event: React.ClipboardEvent<HTMLInputElement>) => {
+        // Only override if we have a multi-cell selection
+        if (selectedCells.size === 0) return;
+
+        event.preventDefault();
+
+        // 1. Gather all selected data
+        const cellsToCopy: { r: number, c: number, val: string }[] = [];
+        const currentMeasurements = getValues('measurements');
+
+        selectedCells.forEach(cellId => {
+            const [rStr, key] = cellId.split('-');
+            const r = parseInt(rStr);
+            const c = columnKeys.indexOf(key);
+
+            if (r >= 0 && r < currentMeasurements.length && c !== -1) {
+                let val = '';
+                if (key === 'std') {
+                    val = String(currentMeasurements[r]?.std ?? '');
+                } else if (key.startsWith('s')) {
+                    const sampleNum = parseInt(key.replace('s', ''));
+                    const sample = currentMeasurements[r]?.samples?.find((s: any) => s.index === sampleNum);
+                    val = String(sample?.value ?? '');
+                }
+                cellsToCopy.push({ r, c, val });
+            }
+        });
+
+        if (cellsToCopy.length === 0) return;
+
+        // 2. Sort by Row then Column to order them correctly
+        cellsToCopy.sort((a, b) => {
+            if (a.r !== b.r) return a.r - b.r; // Top to bottom
+            return a.c - b.c; // Left to right
+        });
+
+        // 3. Construct Grid String (TSV)
+        // We identify unique rows and columns to reconstruct the 2D grid structure
+        const uniqueRows = [...new Set(cellsToCopy.map(x => x.r))].sort((a, b) => a - b);
+        const uniqueCols = [...new Set(cellsToCopy.map(x => x.c))].sort((a, b) => a - b);
+
+        let clipboardString = "";
+
+        uniqueRows.forEach((rowIndex, i) => {
+            const rowCells = cellsToCopy.filter(c => c.r === rowIndex);
+            // We map across uniqueCols to preserve empty gaps if selection was non-contiguous?
+            // Or just collapse? Excel collapses non-contiguous selections usually if dragged, 
+            // but if Ctrl-selected, sometimes it errors.
+            // Let's iterate uniqueCols to be safe and structured.
+
+            const rowStr = uniqueCols.map(colIndex => {
+                const cell = rowCells.find(c => c.c === colIndex);
+                return cell ? cell.val : '';
+            }).join('\t');
+
+            clipboardString += rowStr;
+            if (i < uniqueRows.length - 1) clipboardString += '\n';
+        });
+
+        // 4. Write to clipboard
+        event.clipboardData.setData('text/plain', clipboardString);
+        toast.success(`Copied ${cellsToCopy.length} cells!`);
     };
 
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -506,10 +671,13 @@ const EvaluationForm = () => {
             ...data,
             customer_name: customers.find((c: any) => c.id === data.customer)?.name || 'Unknown',
             measurements: data.measurements.map((m: any) => ({
-                ...m,
-                s1: m.s1 === '' ? null : m.s1, s2: m.s2 === '' ? null : m.s2, s3: m.s3 === '' ? null : m.s3,
-                s4: m.s4 === '' ? null : m.s4, s5: m.s5 === '' ? null : m.s5, s6: m.s6 === '' ? null : m.s6,
+                pom_name: m.pom_name,
+                tol: m.tol,
                 std: m.std === '' ? null : m.std,
+                samples: (m.samples || []).map((s: any) => ({
+                    index: s.index,
+                    value: s.value === '' ? null : parseFloat(s.value) || null
+                }))
             }))
         };
 
@@ -559,10 +727,13 @@ const EvaluationForm = () => {
             const jsonPayload = {
                 ...data,
                 measurements: data.measurements.map((m: any) => ({
-                    ...m,
-                    s1: m.s1 === '' ? null : m.s1, s2: m.s2 === '' ? null : m.s2, s3: m.s3 === '' ? null : m.s3,
-                    s4: m.s4 === '' ? null : m.s4, s5: m.s5 === '' ? null : m.s5, s6: m.s6 === '' ? null : m.s6,
+                    pom_name: m.pom_name,
+                    tol: m.tol,
                     std: m.std === '' ? null : m.std,
+                    samples: (m.samples || []).map((s: any) => ({
+                        index: s.index,
+                        value: s.value === '' ? null : parseFloat(s.value) || null
+                    }))
                 }))
             };
 
@@ -704,6 +875,9 @@ const EvaluationForm = () => {
                             </DialogTrigger>
                         )}
                         <DialogContent className="fixed inset-0 z-50 flex flex-col bg-white max-w-none !rounded-none p-0 m-0 border-none shadow-none !translate-x-0 !translate-y-0">
+                            <DialogDescription className="sr-only">
+                                Full screen evaluation form
+                            </DialogDescription>
                             <DialogHeader className="p-4 border-b shrink-0">
                                 <DialogTitle>Evaluation</DialogTitle>
                             </DialogHeader>
@@ -746,6 +920,9 @@ const EvaluationForm = () => {
                                     </div>
 
                                     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+
+
+
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                             <div className="space-y-2"><Label>Style</Label><Input {...register("style", { required: true })} /></div>
                                             <div className="space-y-2"><Label>Color</Label><Input {...register("color")} /></div>
@@ -770,7 +947,13 @@ const EvaluationForm = () => {
                                                 }}>
                                                     <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                                                     <SelectContent>
-                                                        {customers?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                                        {customers.length === 0 ? (
+                                                            <SelectItem value="none" disabled>
+                                                                {isCustomersLoading ? 'Loading customers...' : 'No customers found'}
+                                                            </SelectItem>
+                                                        ) : (
+                                                            customers.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)
+                                                        )}
                                                     </SelectContent>
                                                 </Select>
                                             </div>
@@ -792,36 +975,61 @@ const EvaluationForm = () => {
                                         </div>
 
 
-                                        {/* Measurements Grid (6 Samples) */}
+                                        {/* Measurements Grid (Dynamic Samples) */}
                                         <div className="space-y-2">
-                                            <Label>Measurements (Hold & Drag to Select Multiple • Delete/Backspace to Clear)</Label>
+                                            <div className="flex items-center justify-between">
+                                                <Label>Measurements (Hold & Drag to Select Multiple • Delete/Backspace to Clear)</Label>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => setSampleCount(Math.max(1, sampleCount - 1))}
+                                                        disabled={sampleCount <= 1}
+                                                    >
+                                                        - Sample
+                                                    </Button>
+                                                    <span className="px-2 py-1 text-sm font-medium">{sampleCount} Samples</span>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => setSampleCount(sampleCount + 1)}
+                                                        disabled={sampleCount >= 10}
+                                                    >
+                                                        + Sample
+                                                    </Button>
+                                                </div>
+                                            </div>
                                             <div className="border rounded-md p-4 bg-white overflow-x-auto max-w-full">
-                                                <div className="min-w-[800px] grid grid-cols-10 gap-2 mb-2 font-medium text-xs text-gray-500 uppercase text-center">
-                                                    <div className="col-span-2 text-left">POM</div>
-                                                    <div className="col-span-1">Tol</div>
-                                                    <div className="col-span-1">Std</div>
-                                                    <div className="col-span-1">S1</div>
-                                                    <div className="col-span-1">S2</div>
-                                                    <div className="col-span-1">S3</div>
-                                                    <div className="col-span-1">S4</div>
-                                                    <div className="col-span-1">S5</div>
-                                                    <div className="col-span-1">S6</div>
+                                                {/* Dynamic grid columns: 2 (POM) + 1 (Tol) + 1 (Std) + sampleCount */}
+                                                <div className={`min-w-[600px] grid gap-2 mb-2 font-medium text-xs text-gray-500 uppercase text-center`}
+                                                    style={{ gridTemplateColumns: `2fr 1fr 1fr ${Array(sampleCount).fill('1fr').join(' ')}` }}>
+                                                    <div className="text-left">POM</div>
+                                                    <div>Tol</div>
+                                                    <div>Std</div>
+                                                    {Array.from({ length: sampleCount }, (_, i) => (
+                                                        <div key={i}>S{i + 1}</div>
+                                                    ))}
                                                 </div>
                                                 {fields.map((field, index) => {
-                                                    const m = measurements[index] || {};
+                                                    const m = measurements[index] || { samples: [] };
                                                     const isRed = (val: any) => checkTol(val, m.std, m.tol);
                                                     return (
-                                                        <div key={field.id} className="min-w-[800px] grid grid-cols-10 gap-2 mb-2 items-center">
-                                                            <div className="col-span-2"><Input {...register(`measurements.${index}.pom_name`)} readOnly className="bg-gray-50 h-8 text-xs" /></div>
-                                                            <div className="col-span-1"><Input {...register(`measurements.${index}.tol`)} readOnly className="bg-gray-50 h-8 text-xs text-center" /></div>
+                                                        <div key={field.id}
+                                                            className={`min-w-[600px] grid gap-2 mb-2 items-center`}
+                                                            style={{ gridTemplateColumns: `2fr 1fr 1fr ${Array(sampleCount).fill('1fr').join(' ')}` }}>
+                                                            <div><Input {...register(`measurements.${index}.pom_name`)} readOnly className="bg-gray-50 h-8 text-xs" /></div>
+                                                            <div><Input {...register(`measurements.${index}.tol`)} readOnly className="bg-gray-50 h-8 text-xs text-center" /></div>
 
                                                             {/* Editable STD Field */}
-                                                            <div className="col-span-1">
+                                                            <div>
                                                                 <Input
                                                                     {...register(`measurements.${index}.std`)}
                                                                     className={`h-8 text-xs text-center ${isSelected(index, 'std') ? 'bg-blue-200 ring-2 ring-blue-500' : 'bg-blue-50'}`}
                                                                     placeholder="-"
                                                                     onPaste={handleMeasurementPaste(index, 'std')}
+                                                                    onCopy={handleCopy}
                                                                     onKeyDown={(e) => handleCellKeyDown(e, index, 'std')}
                                                                     onMouseDown={() => handleCellMouseDown(index, 'std')}
                                                                     onMouseEnter={() => handleCellMouseEnter(index, 'std')}
@@ -831,19 +1039,34 @@ const EvaluationForm = () => {
                                                                 />
                                                             </div>
 
-                                                            {[1, 2, 3, 4, 5, 6].map(num => {
-                                                                const key = `s${num}` as keyof Measurement;
+                                                            {/* Dynamic Sample Inputs */}
+                                                            {Array.from({ length: sampleCount }, (_, sampleIdx) => {
+                                                                const sampleNum = sampleIdx + 1;
+                                                                const key = `s${sampleNum}`;
                                                                 const selected = isSelected(index, key);
+                                                                const sampleValue = getSampleValue(m as Measurement, sampleNum);
                                                                 return (
-                                                                    <div key={num} className="col-span-1">
+                                                                    <div key={sampleNum}>
                                                                         <Input
+                                                                            name={`measurements.${index}.${key}`} // Interaction fix: name required for querySelector navigation
                                                                             type="number" step="0.1"
-                                                                            {...register(`measurements.${index}.${key}`)}
+                                                                            value={sampleValue ?? ''}
+                                                                            onChange={(e) => {
+                                                                                const newSamples = [...(m.samples || [])];
+                                                                                const existingIdx = newSamples.findIndex(s => s.index === sampleNum);
+                                                                                if (existingIdx >= 0) {
+                                                                                    newSamples[existingIdx] = { index: sampleNum, value: e.target.value };
+                                                                                } else {
+                                                                                    newSamples.push({ index: sampleNum, value: e.target.value });
+                                                                                }
+                                                                                setValue(`measurements.${index}.samples` as any, newSamples);
+                                                                            }}
                                                                             className={`h-8 text-center transition-colors 
-                                                                        ${selected ? 'bg-blue-200 ring-2 ring-blue-500 z-10 relative' : ''} 
-                                                                        ${!selected && isRed((m as any)[key]) ? 'text-red-600 font-bold bg-red-50' : ''}
-                                                                    `}
+                                                                                ${selected ? 'bg-blue-200 ring-2 ring-blue-500 z-10 relative' : ''} 
+                                                                                ${!selected && isRed(sampleValue) ? 'text-red-600 font-bold bg-red-50' : ''}
+                                                                            `}
                                                                             onPaste={handleMeasurementPaste(index, key)}
+                                                                            onCopy={handleCopy}
                                                                             onKeyDown={(e) => handleCellKeyDown(e, index, key)}
                                                                             onMouseDown={() => handleCellMouseDown(index, key)}
                                                                             onMouseEnter={() => handleCellMouseEnter(index, key)}
@@ -1234,10 +1457,11 @@ const EvaluationForm = () => {
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>Close Evaluation Form?</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to close the form? Unsaved changes will be lost.
+                        </DialogDescription>
                     </DialogHeader>
-                    <div className="py-4">
-                        <p className="text-gray-600">Do you want to close the Evaluation form? Any unsaved changes will be lost.</p>
-                    </div>
+
                     <div className="flex justify-end gap-3">
                         <Button variant="outline" onClick={handleCancelClose}>
                             Cancel
