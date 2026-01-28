@@ -61,19 +61,18 @@ const styles = StyleSheet.create({
     table: {
         width: 'auto',
         borderStyle: 'solid',
-        borderWidth: 0,
         borderBottomWidth: 1,
         borderBottomColor: '#000',
         marginBottom: 20,
     },
     tableRow: {
         flexDirection: 'row',
-        borderBottomWidth: 0,
     },
     tableHeaderRow: {
         flexDirection: 'row',
         borderBottomWidth: 1,
         borderBottomColor: '#000',
+        borderStyle: 'solid',
     },
     tableColHeader: {
         fontSize: 8,
@@ -131,17 +130,20 @@ const styles = StyleSheet.create({
         marginTop: 5,
         borderWidth: 1,
         borderColor: '#000',
+        borderStyle: 'solid',
     },
     accHeaderRow: {
         flexDirection: 'row',
         backgroundColor: '#e0e0e0', // Light gray background
         borderBottomWidth: 1,
         borderBottomColor: '#000',
+        borderStyle: 'solid',
     },
     accRow: {
         flexDirection: 'row',
         borderBottomWidth: 1,
         borderBottomColor: '#000',
+        borderStyle: 'solid',
     },
     accRowLast: {
         flexDirection: 'row',
@@ -153,12 +155,14 @@ const styles = StyleSheet.create({
         padding: 4,
         borderRightWidth: 1,
         borderRightColor: '#000',
+        borderStyle: 'solid',
     },
     accCell: {
         padding: 4,
         fontSize: 9,
         borderRightWidth: 1,
         borderRightColor: '#000',
+        borderStyle: 'solid',
     },
     accCellLast: {
         padding: 4,

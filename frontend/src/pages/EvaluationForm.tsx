@@ -701,20 +701,57 @@ const EvaluationForm = () => {
                     type: 'evaluation'
                 });
 
-                // B. Generate PDF Client-Side
-                const blob = await pdf(
-                    <EvaluationPDFReport data={jsonPayload} images={imageSlots} />
-                ).toBlob();
+                // B. Generate PDF Client-Side (Nested Try/Catch)
+                try {
+                    // Helper to convert File to Base64
+                    const fileToBase64 = (file: File): Promise<string> => {
+                        return new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.readAsDataURL(file);
+                            reader.onload = () => resolve(reader.result as string);
+                            reader.onerror = error => reject(error);
+                        });
+                    };
 
-                saveAs(blob, `Offline_Evaluation_${data.style}_${data.po_number || 'Draft'}.pdf`);
+                    // Convert images to Base64 asynchronously
+                    const imagesForPdf = await Promise.all(imageSlots.map(async (slot) => {
+                        if (slot.file) {
+                            try {
+                                const base64 = await fileToBase64(slot.file);
+                                return { ...slot, file: base64 };
+                            } catch (e) {
+                                console.error("Failed to convert image to base64", e);
+                                return { ...slot, file: null };
+                            }
+                        }
+                        return { ...slot, file: null };
+                    }));
 
-                toast.success("Saved Offline! PDF generated. Sync when online.");
+                    const blob = await pdf(
+                        <EvaluationPDFReport data={jsonPayload} images={imagesForPdf} />
+                    ).toBlob();
+
+                    saveAs(blob, `Offline_Evaluation_${data.style}_${data.po_number || 'Draft'}.pdf`);
+
+                    toast.success("Saved Offline! PDF generated. Sync when online.");
+                } catch (pdfErr: any) {
+                    console.error("PDF generation failed", pdfErr);
+                    // Include error message for debugging
+                    toast.warning(`Saved to Pending Uploads, but PDF failed: ${pdfErr.message || 'Unknown error'}`);
+                }
+
+                // C. Success State - Reset Form
+                // We reached here, so DB save was definitely successful
                 setIsOpen(false);
                 reset();
                 setImageSlots([{ file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }]);
+                setIsManualTemplateChange(false);
+                setSelectedTemplate(null);
+
             } catch (err) {
+                // This catch block only hits if Dexie save fails
                 console.error("Offline save failed", err);
-                toast.error("Failed to save offline");
+                toast.error("Failed to save offline data. Please try again.");
             } finally {
                 setIsGeneratingPdf(false);
             }
