@@ -3,7 +3,8 @@ from rest_framework import serializers
 from .models import (
     Customer, CustomerEmail, Template, TemplatePOM, Inspection, Measurement, MeasurementSample, InspectionImage, FilterPreset,
     FinalInspection, FinalInspectionDefect, FinalInspectionSizeCheck, FinalInspectionImage,
-    FinalInspectionMeasurement, FinalInspectionMeasurementSample
+    FinalInspectionMeasurement, FinalInspectionMeasurementSample,
+    StyleMaster, SampleComment, StyleLink
 )
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
@@ -335,5 +336,105 @@ class FinalInspectionSerializer(serializers.ModelSerializer):
                 )
                 for s_data in samples_data:
                     FinalInspectionMeasurementSample.objects.create(measurement=measurement, **s_data)
+        
+        return instance
+
+
+# ==================== Style Cycle Serializers ====================
+
+class StyleLinkSerializer(serializers.ModelSerializer):
+    """Serializer for related links/documents."""
+    class Meta:
+        model = StyleLink
+        fields = ['id', 'label', 'url', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class SampleCommentSerializer(serializers.ModelSerializer):
+    """Serializer for sample comments by type."""
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    
+    class Meta:
+        model = SampleComment
+        fields = [
+            'id', 'sample_type',
+            'comments_general', 'comments_fit', 'comments_workmanship',
+            'comments_wash', 'comments_fabric', 'comments_accessories',
+            'created_at', 'updated_at', 'created_by_username'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by_username']
+
+
+class StyleMasterListSerializer(serializers.ModelSerializer):
+    """Minimal serializer for list views."""
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    comments_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = StyleMaster
+        fields = [
+            'id', 'po_number', 'style_name', 'color', 'season',
+            'customer', 'customer_name', 'comments_count',
+            'created_at', 'created_by_username'
+        ]
+    
+    def get_comments_count(self, obj):
+        return obj.comments.count()
+
+
+class StyleMasterSerializer(serializers.ModelSerializer):
+    """Full serializer with nested comments and links."""
+    comments = SampleCommentSerializer(many=True, required=False)
+    links = StyleLinkSerializer(many=True, required=False)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    
+    class Meta:
+        model = StyleMaster
+        fields = [
+            'id', 'po_number', 'style_name', 'color', 'season',
+            'customer', 'customer_name',
+            'comments', 'links',
+            'created_at', 'updated_at', 'created_by', 'created_by_username'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by_username']
+    
+    def create(self, validated_data):
+        """Create StyleMaster with nested comments and links."""
+        comments_data = validated_data.pop('comments', [])
+        links_data = validated_data.pop('links', [])
+        
+        style = StyleMaster.objects.create(**validated_data)
+        
+        for comment_data in comments_data:
+            SampleComment.objects.create(style=style, **comment_data)
+        
+        for link_data in links_data:
+            StyleLink.objects.create(style=style, **link_data)
+        
+        return style
+    
+    def update(self, instance, validated_data):
+        """Update StyleMaster with nested comments and links."""
+        comments_data = validated_data.pop('comments', None)
+        links_data = validated_data.pop('links', None)
+        
+        # Update main fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update comments if provided
+        if comments_data is not None:
+            instance.comments.all().delete()
+            for comment_data in comments_data:
+                SampleComment.objects.create(style=instance, **comment_data)
+        
+        # Update links if provided
+        if links_data is not None:
+            instance.links.all().delete()
+            for link_data in links_data:
+                StyleLink.objects.create(style=instance, **link_data)
         
         return instance

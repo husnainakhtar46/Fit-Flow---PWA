@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardCheck, Users, X, MessageSquare, LogOut, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardCheck, Users, X, MessageSquare, LogOut, ClipboardList, Layers } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useEffect } from 'react';
 import { useAuth } from '../lib/useAuth';
@@ -15,12 +15,14 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
 
     const allLinks = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, visible: canViewDashboard },
+        { href: '/style-cycle', label: 'Style Cycle', icon: Layers, visible: true },
         { href: '/evaluation', label: 'Evaluation', icon: ClipboardCheck, visible: true },
         { href: '/final-inspections', label: 'Final Inspection', icon: ClipboardList, visible: true },
         { href: '/customer-feedback', label: 'Customer Feedback', icon: MessageSquare, visible: true },
         { href: '/templates', label: 'Templates', icon: FileText, visible: canViewTemplates },
         { href: '/customers', label: 'Customers', icon: Users, visible: canViewCustomers },
     ];
+
 
     const links = allLinks.filter(link => link.visible);
 

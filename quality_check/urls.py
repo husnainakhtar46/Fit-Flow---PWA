@@ -2,7 +2,11 @@
 from rest_framework import routers
 from django.contrib import admin
 from django.urls import path, include
-from qc.views import CustomerViewSet, TemplateViewSet, InspectionViewSet, DashboardView, CustomTokenObtainPairView, FilterPresetViewSet, FinalInspectionViewSet
+from qc.views import (
+    CustomerViewSet, TemplateViewSet, InspectionViewSet, DashboardView, 
+    CustomTokenObtainPairView, FilterPresetViewSet, FinalInspectionViewSet,
+    StyleMasterViewSet, SampleCommentViewSet, StyleLinkViewSet
+)
 from rest_framework_simplejwt.views import TokenRefreshView
 
 
@@ -12,6 +16,10 @@ router.register(r"templates", TemplateViewSet)
 router.register(r"inspections", InspectionViewSet)
 router.register(r'filter-presets', FilterPresetViewSet, basename='filterpreset')
 router.register(r'final-inspections', FinalInspectionViewSet)
+# Style Cycle routes
+router.register(r'styles', StyleMasterViewSet)
+router.register(r'sample-comments', SampleCommentViewSet)
+router.register(r'style-links', StyleLinkViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),

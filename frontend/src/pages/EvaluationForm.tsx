@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 
-import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Check } from 'lucide-react';
+import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Check, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import api from '../lib/api';
@@ -81,6 +81,7 @@ const EvaluationForm = () => {
     const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
     const [pendingClose, setPendingClose] = useState(false);
     const [showDecisionError, setShowDecisionError] = useState(false);
+    const [isLoadingStyleComments, setIsLoadingStyleComments] = useState(false);
 
     const [isManualTemplateChange, setIsManualTemplateChange] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -1131,7 +1132,55 @@ const EvaluationForm = () => {
 
                                         {/* ===== QUALITY EVALUATION SECTION ===== */}
                                         <div className="space-y-6 border p-6 rounded-lg bg-white shadow-sm">
-                                            <h3 className="text-lg font-bold text-gray-800 border-b pb-2">Quality Evaluation</h3>
+                                            <div className="flex items-center justify-between border-b pb-2">
+                                                <h3 className="text-lg font-bold text-gray-800">Quality Evaluation</h3>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled={!watch('po_number') || isLoadingStyleComments}
+                                                    onClick={async () => {
+                                                        const poNumber = watch('po_number');
+                                                        if (!poNumber) {
+                                                            toast.error('Please enter a PO Number first');
+                                                            return;
+                                                        }
+                                                        setIsLoadingStyleComments(true);
+                                                        try {
+                                                            const res = await api.get(`/styles/by_po/?po_number=${encodeURIComponent(poNumber)}`);
+                                                            const style = res.data;
+                                                            // Find the latest comment (first one returned is usually most recent)
+                                                            const latestComment = style.comments?.[0];
+                                                            if (latestComment) {
+                                                                setValue('customer_remarks', latestComment.comments_general || '');
+                                                                setValue('customer_fit_comments', latestComment.comments_fit || '');
+                                                                setValue('customer_workmanship_comments', latestComment.comments_workmanship || '');
+                                                                setValue('customer_wash_comments', latestComment.comments_wash || '');
+                                                                setValue('customer_fabric_comments', latestComment.comments_fabric || '');
+                                                                setValue('customer_accessories_comments', latestComment.comments_accessories || '');
+                                                                toast.success(`Loaded comments from Style Cycle (${latestComment.sample_type})`);
+                                                            } else {
+                                                                toast.info('No comments found for this PO in Style Cycle');
+                                                            }
+                                                        } catch (err: any) {
+                                                            if (err.response?.status === 404) {
+                                                                toast.info('No style found with this PO number in Style Cycle');
+                                                            } else {
+                                                                toast.error('Failed to load comments from Style Cycle');
+                                                            }
+                                                        } finally {
+                                                            setIsLoadingStyleComments(false);
+                                                        }
+                                                    }}
+                                                >
+                                                    {isLoadingStyleComments ? (
+                                                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                                    ) : (
+                                                        <Layers className="w-4 h-4 mr-1" />
+                                                    )}
+                                                    Load from Style Cycle
+                                                </Button>
+                                            </div>
 
                                             {/* Legacy Customer Remarks (keep for old data) */}
                                             <div className="space-y-2">

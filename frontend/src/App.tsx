@@ -9,11 +9,13 @@ import EvaluationForm from './pages/EvaluationForm';
 import Customers from './pages/Customers';
 import CustomerFeedback from './pages/CustomerFeedback';
 import FinalInspections from './pages/FinalInspections';
+import StyleCycle from './pages/StyleCycle';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
 import MobileHeader from './components/MobileHeader';
 import MobileSidebar from './components/MobileSidebar';
 import { useAuth } from './lib/useAuth';
+
 
 const queryClient = new QueryClient();
 
@@ -102,12 +104,14 @@ function App() {
                     <Route element={<Layout />}>
                         <Route path="/" element={<HomeRedirect />} />
                         <Route path="/dashboard" element={<ProtectedDashboard />} />
+                        <Route path="/style-cycle" element={<StyleCycle />} />
                         <Route path="/templates" element={<ProtectedTemplates />} />
                         <Route path="/evaluation" element={<EvaluationForm />} />
                         <Route path="/final-inspections" element={<FinalInspections />} />
                         <Route path="/customer-feedback" element={<CustomerFeedback />} />
                         <Route path="/customers" element={<ProtectedCustomers />} />
                     </Route>
+
                 </Routes>
             </Router>
             <Toaster />

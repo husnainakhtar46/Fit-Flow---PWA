@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardCheck, Users, LogOut, MessageSquare, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardCheck, Users, LogOut, MessageSquare, ClipboardList, Layers } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/useAuth';
 
@@ -18,6 +18,12 @@ const Sidebar = () => {
             label: 'Dashboard',
             icon: LayoutDashboard,
             visible: canViewDashboard
+        },
+        {
+            href: '/style-cycle',
+            label: 'Style Cycle',
+            icon: Layers,
+            visible: true // Everyone can see style cycle
         },
         {
             href: '/evaluation',
@@ -50,6 +56,7 @@ const Sidebar = () => {
             visible: canViewCustomers
         },
     ];
+
 
     const links = allLinks.filter(link => link.visible);
 

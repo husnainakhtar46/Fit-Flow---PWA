@@ -449,3 +449,158 @@ class FinalInspectionViewSet(viewsets.ModelViewSet):
         buffer = generate_final_inspection_pdf(final_inspection)
         filename = f"FIR_{final_inspection.order_no}_{final_inspection.style_no}.pdf"
         return FileResponse(buffer, filename=filename, content_type='application/pdf')
+
+
+# ==================== Style Cycle ViewSet ====================
+
+from .models import StyleMaster, SampleComment, StyleLink
+from .serializers import (
+    StyleMasterSerializer, StyleMasterListSerializer, 
+    SampleCommentSerializer, StyleLinkSerializer
+)
+
+
+class StyleMasterViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Style Cycle management.
+    Merchandisers use this to create style files and add customer sample comments.
+    QA can load the latest comments into the Evaluation Form.
+    """
+    queryset = StyleMaster.objects.all()
+    serializer_class = StyleMasterSerializer
+    permission_classes = [IsAuthenticated]
+    
+    # Filtering and ordering
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['po_number', 'style_name', 'customer__name', 'season']
+    ordering_fields = ['created_at', 'po_number', 'style_name']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        """Optimize queries with select_related and prefetch_related."""
+        queryset = StyleMaster.objects.select_related('customer', 'created_by').order_by('-created_at')
+        
+        # Only prefetch nested data for detail views
+        if self.action in ['retrieve', 'update', 'partial_update']:
+            queryset = queryset.prefetch_related('comments', 'links')
+        
+        # Filter by query params
+        customer_id = self.request.query_params.get('customer')
+        if customer_id:
+            queryset = queryset.filter(customer_id=customer_id)
+        
+        return queryset
+    
+    def get_serializer_class(self):
+        """Use list serializer for list view, full serializer otherwise."""
+        if self.action == 'list':
+            return StyleMasterListSerializer
+        return StyleMasterSerializer
+    
+    def perform_create(self, serializer):
+        """Save the user who created this style."""
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def by_po(self, request):
+        """
+        Get style details by PO number.
+        Used by EvaluationForm to load customer comments.
+        
+        Query Params:
+            po_number: The PO number to search for
+        
+        Returns: StyleMaster with nested comments and links
+        """
+        po_number = request.query_params.get('po_number')
+        if not po_number:
+            return Response(
+                {'error': 'po_number query parameter is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            style = StyleMaster.objects.prefetch_related('comments', 'links').get(po_number__iexact=po_number)
+            serializer = StyleMasterSerializer(style)
+            return Response(serializer.data)
+        except StyleMaster.DoesNotExist:
+            return Response(
+                {'error': f'No style found with PO number: {po_number}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    @action(detail=True, methods=['post'])
+    def add_comment(self, request, pk=None):
+        """Add a new sample comment to a style."""
+        style = self.get_object()
+        serializer = SampleCommentSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(style=style, created_by=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def add_link(self, request, pk=None):
+        """Add a new link to a style."""
+        style = self.get_object()
+        serializer = StyleLinkSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(style=style)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['get'])
+    def latest_comments(self, request, pk=None):
+        """
+        Get the latest sample comment for a style.
+        This is used by EvaluationForm to auto-populate customer comments.
+        """
+        style = self.get_object()
+        latest_comment = style.comments.order_by('-created_at').first()
+        
+        if latest_comment:
+            serializer = SampleCommentSerializer(latest_comment)
+            return Response(serializer.data)
+        return Response({'message': 'No comments found for this style'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class SampleCommentViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing individual sample comments."""
+    queryset = SampleComment.objects.all()
+    serializer_class = SampleCommentSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = SampleComment.objects.select_related('style', 'created_by').order_by('-created_at')
+        
+        # Filter by style
+        style_id = self.request.query_params.get('style')
+        if style_id:
+            queryset = queryset.filter(style_id=style_id)
+        
+        # Filter by sample_type
+        sample_type = self.request.query_params.get('sample_type')
+        if sample_type:
+            queryset = queryset.filter(sample_type=sample_type)
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class StyleLinkViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing style links."""
+    queryset = StyleLink.objects.all()
+    serializer_class = StyleLinkSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = StyleLink.objects.select_related('style').order_by('label')
+        
+        # Filter by style
+        style_id = self.request.query_params.get('style')
+        if style_id:
+            queryset = queryset.filter(style_id=style_id)
+        
+        return queryset
