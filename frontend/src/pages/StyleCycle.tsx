@@ -71,7 +71,8 @@ const SAMPLE_TYPES = [
     'Fit Sample',
     'PP Sample',
     'Size Set',
-    'Top of Production',
+    'SMS',
+    'Shipment Sample',
 ];
 
 const SAMPLE_NUMBERS = [
@@ -652,8 +653,8 @@ const StyleCycle = () => {
                                         >
                                             <div className="flex items-center gap-3">
                                                 <span className={`px-3 py-1 rounded-full text-sm font-semibold ${index === 0
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-gray-200 text-gray-700'
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-gray-200 text-gray-700'
                                                     }`}>
                                                     {sampleLabel}
                                                 </span>

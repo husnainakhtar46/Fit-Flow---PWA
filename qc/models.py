@@ -628,7 +628,8 @@ class SampleComment(models.Model):
         ('Fit Sample', 'Fit Sample'),
         ('PP Sample', 'PP Sample'),
         ('Size Set', 'Size Set'),
-        ('Top of Production', 'Top of Production'),
+        ('SMS', 'SMS'),
+        ('Shipment Sample', 'Shipment Sample'),
     ]
 
     SAMPLE_NUMBER_CHOICES = [
