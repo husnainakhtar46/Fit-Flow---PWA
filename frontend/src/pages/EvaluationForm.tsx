@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 
-import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Check, Layers } from 'lucide-react';
+import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import api from '../lib/api';
@@ -79,9 +79,10 @@ const EvaluationForm = () => {
     const { canCreateInspections, isReadOnly, canEditEvaluation } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
-    const [pendingClose, setPendingClose] = useState(false);
     const [showDecisionError, setShowDecisionError] = useState(false);
     const [isLoadingStyleComments, setIsLoadingStyleComments] = useState(false);
+    const [showPOSuggestions, setShowPOSuggestions] = useState(false);
+    const [poSuggestions, setPOSuggestions] = useState<any[]>([]);
 
     const [isManualTemplateChange, setIsManualTemplateChange] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -333,7 +334,7 @@ const EvaluationForm = () => {
     }, [modalSearchTerm]);
 
     // Fetching
-    const { data: inspectionData, isLoading, isPlaceholderData } = useQuery({
+    const { data: inspectionData, isPlaceholderData } = useQuery({
         queryKey: ['inspections', page, filters],
         queryFn: async () => {
             const params = new URLSearchParams();
@@ -1148,23 +1149,37 @@ const EvaluationForm = () => {
                                                         setIsLoadingStyleComments(true);
                                                         try {
                                                             const res = await api.get(`/styles/by_po/?po_number=${encodeURIComponent(poNumber)}`);
-                                                            const style = res.data;
-                                                            // Find the latest comment (first one returned is usually most recent)
-                                                            const latestComment = style.comments?.[0];
-                                                            if (latestComment) {
-                                                                setValue('customer_remarks', latestComment.comments_general || '');
-                                                                setValue('customer_fit_comments', latestComment.comments_fit || '');
-                                                                setValue('customer_workmanship_comments', latestComment.comments_workmanship || '');
-                                                                setValue('customer_wash_comments', latestComment.comments_wash || '');
-                                                                setValue('customer_fabric_comments', latestComment.comments_fabric || '');
-                                                                setValue('customer_accessories_comments', latestComment.comments_accessories || '');
-                                                                toast.success(`Loaded comments from Style Cycle (${latestComment.sample_type})`);
-                                                            } else {
-                                                                toast.info('No comments found for this PO in Style Cycle');
+
+                                                            // Handle Exact Match
+                                                            if (res.data && !res.data.suggestions) {
+                                                                const style = res.data;
+                                                                const latestComment = style.comments?.[0];
+                                                                if (latestComment) {
+                                                                    setValue('customer_remarks', latestComment.comments_general || '');
+                                                                    setValue('customer_fit_comments', latestComment.comments_fit || '');
+                                                                    setValue('customer_workmanship_comments', latestComment.comments_workmanship || '');
+                                                                    setValue('customer_wash_comments', latestComment.comments_wash || '');
+                                                                    setValue('customer_fabric_comments', latestComment.comments_fabric || '');
+                                                                    setValue('customer_accessories_comments', latestComment.comments_accessories || '');
+                                                                    toast.success(`Loaded comments from Style Cycle (${latestComment.sample_type})`);
+                                                                } else {
+                                                                    toast.info('No comments found for this PO in Style Cycle');
+                                                                }
+                                                            }
+                                                            // Handle Suggestions (Fuzzy Match)
+                                                            else if (res.data && res.data.suggestions) {
+                                                                setPOSuggestions(res.data.suggestions);
+                                                                setShowPOSuggestions(true);
                                                             }
                                                         } catch (err: any) {
                                                             if (err.response?.status === 404) {
-                                                                toast.info('No style found with this PO number in Style Cycle');
+                                                                // Even 404 might return suggestions now
+                                                                if (err.response.data?.suggestions) {
+                                                                    setPOSuggestions(err.response.data.suggestions);
+                                                                    setShowPOSuggestions(true);
+                                                                } else {
+                                                                    toast.info('No style found with this PO number in Style Cycle');
+                                                                }
                                                             } else {
                                                                 toast.error('Failed to load comments from Style Cycle');
                                                             }
@@ -1272,7 +1287,7 @@ const EvaluationForm = () => {
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
-                                                        onClick={() => appendAcc({ name: '', status: 'OK', comment: '' })}
+                                                        onClick={() => appendAcc({ name: '', comment: '' })}
                                                         className="bg-white hover:bg-gray-100 h-8"
                                                     >
                                                         <Plus className="w-3 h-3 mr-1" /> Custom Item
@@ -1457,8 +1472,8 @@ const EvaluationForm = () => {
                                             </div>
                                         </div>
 
-                                        <Button type="submit" className="w-full h-12 text-lg" disabled={createMutation.isPending}>
-                                            {createMutation.isPending ? 'Saving...' : 'Save Evaluation'}
+                                        <Button type="submit" className="w-full h-12 text-lg" disabled={createMutation.isPending || isGeneratingPdf}>
+                                            {createMutation.isPending || isGeneratingPdf ? 'Saving...' : 'Save Evaluation'}
                                         </Button>
                                     </form>
                                 </div>
@@ -1563,6 +1578,89 @@ const EvaluationForm = () => {
                         <Button variant="destructive" onClick={handleConfirmClose}>
                             Yes, Close
                         </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* PO Suggestions Dialog */}
+            <Dialog open={showPOSuggestions} onOpenChange={setShowPOSuggestions}>
+                <DialogContent className="sm:max-w-xl">
+                    <DialogHeader>
+                        <DialogTitle>PO Number Not Found</DialogTitle>
+                        <DialogDescription>
+                            We couldn't find an exact match. Did you mean one of these?
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[300px] overflow-y-auto border rounded-md">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>PO Number</TableHead>
+                                    <TableHead>Style</TableHead>
+                                    <TableHead>Customer</TableHead>
+                                    <TableHead></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {poSuggestions.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="text-center py-4 text-gray-500">
+                                            No similar PO numbers found.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    poSuggestions.map((s) => (
+                                        <TableRow key={s.id} className="hover:bg-gray-50">
+                                            <TableCell className="font-medium">{s.po_number}</TableCell>
+                                            <TableCell>{s.style_name}</TableCell>
+                                            <TableCell>{s.customer_name || '-'}</TableCell>
+                                            <TableCell>
+                                                <Button size="sm" onClick={async () => {
+                                                    // Update PO Number field
+                                                    setValue('po_number', s.po_number);
+                                                    setShowPOSuggestions(false);
+
+                                                    // Load comments for this style
+                                                    setIsLoadingStyleComments(true);
+                                                    try {
+                                                        // Fetch by ID to be safe and accurate
+                                                        const res = await api.get(`/styles/${s.id}/`);
+                                                        const style = res.data;
+                                                        const latestComment = style.comments?.[0];
+
+                                                        if (latestComment) {
+                                                            setValue('customer_remarks', latestComment.comments_general || '');
+                                                            setValue('customer_fit_comments', latestComment.comments_fit || '');
+                                                            setValue('customer_workmanship_comments', latestComment.comments_workmanship || '');
+                                                            setValue('customer_wash_comments', latestComment.comments_wash || '');
+                                                            setValue('customer_fabric_comments', latestComment.comments_fabric || '');
+                                                            setValue('customer_accessories_comments', latestComment.comments_accessories || '');
+                                                            toast.success(`Loaded comments from Style Cycle (${latestComment.sample_type})`);
+                                                        } else {
+                                                            toast.info('Style loaded, but no comments found.');
+                                                        }
+                                                        // Also update other style info if empty
+                                                        if (!getValues('style')) setValue('style', style.style_name);
+                                                        if (!getValues('color')) setValue('color', style.color);
+                                                        if (!getValues('customer') && style.customer) setValue('customer', style.customer);
+
+                                                    } catch (err) {
+                                                        toast.error('Failed to load style details');
+                                                    } finally {
+                                                        setIsLoadingStyleComments(false);
+                                                    }
+                                                }}>
+                                                    Select
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                    <div className="flex justify-end">
+                        <Button variant="ghost" onClick={() => setShowPOSuggestions(false)}>Cancel</Button>
                     </div>
                 </DialogContent>
             </Dialog>

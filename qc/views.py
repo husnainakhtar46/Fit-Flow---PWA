@@ -504,30 +504,95 @@ class StyleMasterViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def by_po(self, request):
         """
-        Get style details by PO number.
+        Get style details by PO number with fuzzy matching support.
         Used by EvaluationForm to load customer comments.
         
         Query Params:
             po_number: The PO number to search for
         
-        Returns: StyleMaster with nested comments and links
+        Returns: 
+            - Exact match: StyleMaster with nested comments and links
+            - No exact match: List of similar PO suggestions
         """
-        po_number = request.query_params.get('po_number')
+        po_number = request.query_params.get('po_number', '').strip()
         if not po_number:
             return Response(
                 {'error': 'po_number query parameter is required'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Try exact match first (case-insensitive)
         try:
             style = StyleMaster.objects.prefetch_related('comments', 'links').get(po_number__iexact=po_number)
             serializer = StyleMasterSerializer(style)
             return Response(serializer.data)
         except StyleMaster.DoesNotExist:
-            return Response(
-                {'error': f'No style found with PO number: {po_number}'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            pass
+        
+        # No exact match - search for similar PO numbers
+        import re
+        
+        # Remove ALL non-alphanumeric characters (including dots, slashes) for cleaner comparison
+        # e.g., "236.023" -> "236023", "236-023" -> "236023"
+        clean_po = re.sub(r'[^a-zA-Z0-9]', '', po_number).lower()
+        
+        # Find similar matches using multiple strategies
+        suggestions = []
+        
+        # Strategy 1: Contains search (original input)
+        # This catches "236.02" in "236.023"
+        contains_matches = StyleMaster.objects.filter(
+            po_number__icontains=po_number
+        ).select_related('customer')[:10]
+        
+        filtered_ids = set()
+        
+        for s in contains_matches:
+            suggestions.append({
+                'id': str(s.id),
+                'po_number': s.po_number,
+                'style_name': s.style_name,
+                'color': s.color,
+                'customer_name': s.customer.name if s.customer else None,
+            })
+            filtered_ids.add(str(s.id))
+        
+        # Strategy 2: Normalized fuzzy search
+        # This catches "236-023" vs "236.023" vs "236023"
+        if len(suggestions) < 10:
+            # Look at recent styles first (optimization)
+            all_styles = StyleMaster.objects.select_related('customer').order_by('-created_at')[:200]
+            for s in all_styles:
+                if str(s.id) not in filtered_ids:
+                    # Clean DB value same way
+                    clean_style_po = re.sub(r'[^a-zA-Z0-9]', '', s.po_number).lower()
+                    
+                    # Check if normalized versions match or strictly contain each other
+                    # We only allow match if alphanumeric string is non-empty and has significant overlap
+                    if clean_po and clean_style_po and (clean_po in clean_style_po or clean_style_po in clean_po):
+                        suggestions.append({
+                            'id': str(s.id),
+                            'po_number': s.po_number,
+                            'style_name': s.style_name,
+                            'color': s.color,
+                            'customer_name': s.customer.name if s.customer else None,
+                        })
+                        filtered_ids.add(str(s.id))
+                
+                if len(suggestions) >= 10:
+                    break
+        
+        if suggestions:
+            return Response({
+                'exact_match': False,
+                'suggestions': suggestions,
+                'searched_po': po_number
+            }, status=status.HTTP_200_OK)
+        
+        return Response(
+            {'error': f'No style found with PO number: {po_number}', 'suggestions': []},
+            status=status.HTTP_404_NOT_FOUND
+        )
     
     @action(detail=True, methods=['post'])
     def add_comment(self, request, pk=None):
