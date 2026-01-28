@@ -2,140 +2,186 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 
 const styles = StyleSheet.create({
     page: {
-        padding: 50,
+        padding: 40,
         fontSize: 10,
         fontFamily: 'Helvetica',
+        paddingTop: 30,
+        paddingBottom: 30,
     },
     // Header
+    headerContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 10,
+    },
     headerTitle: {
         fontSize: 18,
         fontFamily: 'Helvetica-Bold',
-        marginBottom: 5,
     },
-    statusBadge: {
+    statusContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    statusLabel: {
         fontSize: 14,
         fontFamily: 'Helvetica-Bold',
-        textAlign: 'right',
-        position: 'absolute',
-        top: 0,
-        right: 0,
+        color: '#000',
+    },
+    statusValue: {
+        fontSize: 14,
+        fontFamily: 'Helvetica-Bold',
+        marginLeft: 5,
     },
     // General Info
     infoContainer: {
         flexDirection: 'row',
-        marginTop: 20,
-        marginBottom: 20,
+        marginBottom: 15,
+        justifyContent: 'space-between',
     },
     infoColumn: {
-        width: '50%',
+        width: '48%',
         flexDirection: 'column',
-        gap: 5,
     },
-    infoText: {
-        fontSize: 12,
+    infoRow: {
+        flexDirection: 'row',
+        marginBottom: 2,
+    },
+    infoLabel: {
+        fontSize: 10,
         fontFamily: 'Helvetica',
+        width: 80,
+    },
+    infoValue: {
+        fontSize: 10,
+        fontFamily: 'Helvetica',
+        flex: 1,
     },
     // Tables
     table: {
         width: 'auto',
         borderStyle: 'solid',
-        borderWidth: 1,
-        borderRightWidth: 0,
-        borderBottomWidth: 0,
+        borderWidth: 0,
+        borderBottomWidth: 1,
+        borderBottomColor: '#000',
         marginBottom: 20,
     },
     tableRow: {
-        margin: 'auto',
         flexDirection: 'row',
+        borderBottomWidth: 0,
+    },
+    tableHeaderRow: {
+        flexDirection: 'row',
+        borderBottomWidth: 1,
+        borderBottomColor: '#000',
     },
     tableColHeader: {
-        width: '11.1%', // 9 columns roughly equal
-        borderStyle: 'solid',
-        borderWidth: 1,
-        borderLeftWidth: 0,
-        borderTopWidth: 0,
-        padding: 4,
-        fontFamily: 'Helvetica-Bold',
         fontSize: 8,
+        fontFamily: 'Helvetica-Bold',
+        padding: 3,
+        textAlign: 'left',
     },
     tableCol: {
-        width: '11.1%',
-        borderStyle: 'solid',
-        borderWidth: 1,
-        borderLeftWidth: 0,
-        borderTopWidth: 0,
-        padding: 4,
         fontSize: 8,
+        padding: 3,
+        textAlign: 'left',
     },
     // Specific Table Columns
-    colPom: { width: '30%' },
-    colStd: { width: '8.75%' },
+    colPom: { width: '35%' },
+    colTol: { width: '10%' },
+    colStd: { width: '10%' },
+    colSample: { width: '10%' },
 
     // Comments
     sectionTitle: {
-        fontSize: 12,
+        fontSize: 11,
         fontFamily: 'Helvetica-Bold',
-        marginTop: 15,
-        marginBottom: 8,
+        marginTop: 10,
+        marginBottom: 5,
     },
     commentBlock: {
-        marginBottom: 10,
+        marginBottom: 5,
     },
     commentLabel: {
         fontSize: 10,
         fontFamily: 'Helvetica-Bold',
-        marginBottom: 2,
-    },
-    custComment: {
-        fontSize: 9,
-        fontFamily: 'Helvetica-Oblique',
-        color: '#996600', // Brown
-        marginLeft: 10,
-        marginBottom: 2,
+        marginBottom: 1,
     },
     qaComment: {
         fontSize: 9,
         fontFamily: 'Helvetica',
         color: '#000099', // Blue
-        marginLeft: 10,
+        marginLeft: 15,
     },
+
     // Fabric & Accessories
-    checkRow: {
+    fabricRow: {
         flexDirection: 'row',
         marginBottom: 5,
+        alignItems: 'center',
     },
-    checkLabel: {
-        fontSize: 10,
-        fontFamily: 'Helvetica-Bold',
-        width: 80,
+    fabricItem: {
+        flexDirection: 'row',
+        marginRight: 40,
+        alignItems: 'center',
     },
 
     // Accessories Table
     accTable: {
         marginTop: 5,
-        borderTopWidth: 1,
-        borderLeftWidth: 1,
+        borderWidth: 1,
         borderColor: '#000',
     },
-    accHeader: {
-        backgroundColor: '#e4e4e4',
-        fontFamily: 'Helvetica-Bold',
-        fontSize: 9,
-        padding: 4,
-        borderRightWidth: 1,
+    accHeaderRow: {
+        flexDirection: 'row',
+        backgroundColor: '#e0e0e0', // Light gray background
         borderBottomWidth: 1,
-        borderColor: '#000',
+        borderBottomColor: '#000',
     },
     accRow: {
         flexDirection: 'row',
         borderBottomWidth: 1,
-        borderColor: '#000',
+        borderBottomColor: '#000',
+    },
+    accRowLast: {
+        flexDirection: 'row',
+        borderBottomWidth: 0,
+    },
+    accHeaderCell: {
+        fontFamily: 'Helvetica-Bold',
+        fontSize: 9,
+        padding: 4,
+        borderRightWidth: 1,
+        borderRightColor: '#000',
     },
     accCell: {
         padding: 4,
         fontSize: 9,
         borderRightWidth: 1,
-        borderColor: '#000',
+        borderRightColor: '#000',
+    },
+    accCellLast: {
+        padding: 4,
+        fontSize: 9,
+        borderRightWidth: 0,
+    },
+
+    // Bottom Section
+    customerAddressed: {
+        flexDirection: 'row',
+        marginTop: 10,
+        marginBottom: 10,
+        alignItems: 'center',
+    },
+    finalRemarksLabel: {
+        fontSize: 10,
+        fontFamily: 'Helvetica-Bold',
+        marginTop: 10,
+    },
+    finalRemarksText: {
+        fontSize: 9,
+        fontFamily: 'Helvetica',
+        marginTop: 2,
     },
 
     // Utilities
@@ -143,7 +189,6 @@ const styles = StyleSheet.create({
     red: { color: '#FF0000' },
     green: { color: '#008000' },
     orange: { color: '#FF8000' },
-    gray: { color: '#555' },
 });
 
 interface EvaluationPDFReportProps {
@@ -153,12 +198,13 @@ interface EvaluationPDFReportProps {
 
 const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
 
-    // Helper to get status color
     const getDecisionColor = (d: string) => {
-        if (d === 'Rejected') return styles.red;
-        if (d === 'Accepted') return styles.green;
-        if (d === 'Represent') return styles.orange;
-        return { color: '#000' };
+        if (!d) return styles.statusValue; // Default black
+        const lower = d.toLowerCase();
+        if (lower === 'rejected') return styles.red;
+        if (lower === 'accepted') return styles.green;
+        if (lower === 'represent') return styles.orange;
+        return styles.statusValue;
     };
 
     const isOutOfTolerance = (value: any, std: any, tol: any) => {
@@ -170,55 +216,78 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
         return Math.abs(numVal - numStd) > numTol;
     };
 
+    // Determine max samples for table columns
+    const maxSamples = Math.max(3, ...data.measurements?.map((m: any) => m.samples?.length || 0) || [3]);
+
     return (
         <Document>
             <Page size="LETTER" style={styles.page}>
 
                 {/* Header */}
-                <View>
+                <View style={styles.headerContainer}>
                     <Text style={styles.headerTitle}>SAMPLE EVALUATION REPORT</Text>
-                    <Text style={[styles.statusBadge, getDecisionColor(data.decision)]}>
-                        STATUS: {(data.decision || 'PENDING').toUpperCase()}
-                    </Text>
+                    <View style={styles.statusContainer}>
+                        <Text style={styles.statusLabel}>STATUS: </Text>
+                        <Text style={[styles.statusValue, getDecisionColor(data.decision)]}>
+                            {(data.decision || 'PENDING').toUpperCase()}
+                        </Text>
+                    </View>
                 </View>
 
                 {/* Info Block */}
                 <View style={styles.infoContainer}>
                     <View style={styles.infoColumn}>
-                        <Text style={styles.infoText}>Style: {data.style}</Text>
-                        <Text style={styles.infoText}>Color: {data.color}</Text>
-                        <Text style={styles.infoText}>PO #: {data.po_number}</Text>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Style:</Text>
+                            <Text style={styles.infoValue}>{data.style}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Color:</Text>
+                            <Text style={styles.infoValue}>{data.color}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>PO #:</Text>
+                            <Text style={styles.infoValue}>{data.po_number}</Text>
+                        </View>
                     </View>
                     <View style={styles.infoColumn}>
-                        <Text style={styles.infoText}>Date: {new Date(data.created_at || Date.now()).toLocaleDateString()}</Text>
-                        <Text style={styles.infoText}>Stage: {data.stage}</Text>
-                        <Text style={styles.infoText}>Customer: {data.customer_name || 'N/A'}</Text>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Date:</Text>
+                            <Text style={styles.infoValue}>{new Date(data.created_at || Date.now()).toISOString().split('T')[0]}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Stage:</Text>
+                            <Text style={styles.infoValue}>{data.stage}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Customer:</Text>
+                            <Text style={styles.infoValue}>{data.customer_name || 'N/A'}</Text>
+                        </View>
                     </View>
                 </View>
 
                 {/* Measurement Table */}
                 <View style={styles.table}>
-                    <View style={styles.tableRow}>
+                    <View style={styles.tableHeaderRow}>
                         <Text style={[styles.tableColHeader, styles.colPom]}>POM</Text>
-                        <Text style={[styles.tableColHeader, styles.colStd]}>Tol</Text>
+                        <Text style={[styles.tableColHeader, styles.colTol]}>Tol</Text>
                         <Text style={[styles.tableColHeader, styles.colStd]}>Std</Text>
-                        {Array.from({ length: Math.max(3, ...data.measurements?.map((m: any) => m.samples?.length || 0) || [3]) }, (_, i) => (
-                            <Text key={i} style={[styles.tableColHeader, styles.colStd]}>S{i + 1}</Text>
+                        {Array.from({ length: maxSamples }, (_, i) => (
+                            <Text key={i} style={[styles.tableColHeader, styles.colSample]}>S{i + 1}</Text>
                         ))}
                     </View>
                     {data.measurements?.map((m: any, i: number) => {
-                        const maxSamples = Math.max(3, ...data.measurements?.map((meas: any) => meas.samples?.length || 0) || [3]);
                         const samples = m.samples || [];
                         return (
                             <View key={i} style={styles.tableRow}>
                                 <Text style={[styles.tableCol, styles.colPom]}>{m.pom_name}</Text>
-                                <Text style={[styles.tableCol, styles.colStd]}>{m.tol}</Text>
+                                <Text style={[styles.tableCol, styles.colTol]}>{m.tol}</Text>
                                 <Text style={[styles.tableCol, styles.colStd]}>{m.std || '-'}</Text>
                                 {Array.from({ length: maxSamples }, (_, idx) => {
                                     const sample = samples.find((s: any) => s.index === idx + 1);
                                     const val = sample?.value;
                                     return (
-                                        <Text key={idx} style={[styles.tableCol, styles.colStd, isOutOfTolerance(val, m.std, m.tol) ? styles.red : {}]}>
+                                        <Text key={idx} style={[styles.tableCol, styles.colSample, isOutOfTolerance(val, m.std, m.tol) ? styles.red : {}]}>
                                             {val || '-'}
                                         </Text>
                                     );
@@ -228,7 +297,59 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                     })}
                 </View>
 
-                {/* Evaluation Comments (Comparison) */}
+                {/* Fabric Check */}
+                <Text style={styles.sectionTitle}>Fabric Check:</Text>
+                <View style={styles.fabricRow}>
+                    <View style={styles.fabricItem}>
+                        <Text style={{ fontFamily: 'Helvetica', fontSize: 10 }}>Handfeel:  </Text>
+                        <Text style={[{ fontSize: 10, fontFamily: 'Helvetica' }, (!data.fabric_handfeel || data.fabric_handfeel === 'OK') ? styles.green : styles.red]}>
+                            {data.fabric_handfeel || 'OK'}
+                        </Text>
+                    </View>
+                    <View style={styles.fabricItem}>
+                        <Text style={{ fontFamily: 'Helvetica', fontSize: 10 }}>Pilling:  </Text>
+                        <Text style={[{ fontSize: 10, fontFamily: 'Helvetica' }, data.fabric_pilling === 'High' ? styles.red : data.fabric_pilling === 'Low' ? styles.orange : styles.green]}>
+                            {data.fabric_pilling || 'None'}
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Accessories Checklist */}
+                <Text style={styles.sectionTitle}>Accessories Checklist:</Text>
+                {data.accessories_data && data.accessories_data.length > 0 ? (
+                    <View style={styles.accTable}>
+                        <View style={styles.accHeaderRow}>
+                            <Text style={[styles.accHeaderCell, { width: '40%' }]}>Item</Text>
+                            <Text style={[styles.accHeaderCell, { width: '60%', borderRightWidth: 0 }]}>Remarks</Text>
+                        </View>
+                        {data.accessories_data.map((item: any, i: number) => {
+                            const isLast = i === data.accessories_data.length - 1;
+                            return (
+                                <View key={i} style={isLast ? styles.accRowLast : styles.accRow}>
+                                    <Text style={[styles.accCell, { width: '40%' }]}>{item.name}</Text>
+                                    <Text style={[styles.accCellLast, { width: '60%' }]}>{item.comment}</Text>
+                                </View>
+                            );
+                        })}
+                    </View>
+                ) : (
+                    <Text style={{ fontSize: 9, fontStyle: 'italic', color: '#555' }}>No accessories checked.</Text>
+                )}
+
+                {/* Customer Comments Addressed */}
+                <View style={styles.customerAddressed}>
+                    <Text style={styles.bold}>Customer Comments Addressed:  </Text>
+                    <Text style={[styles.bold, { fontSize: 10 }, data.customer_comments_addressed ? styles.green : styles.orange]}>
+                        {data.customer_comments_addressed ? 'YES' : 'NO'}
+                    </Text>
+                    {/* Visual square block style as seen in reference could be done with a View, 
+                        but standard text is safer/cleaner. Reference has "NO" in orange block-like text.
+                        The logic above colors the text itself.
+                    */}
+                </View>
+
+
+                {/* Evaluation Comments (Customer -> QA) */}
                 <Text style={styles.sectionTitle}>Evaluation Comments (Customer → QA):</Text>
                 {[
                     { label: 'Fit', cust: data.customer_fit_comments, qa: data.qa_fit_comments },
@@ -236,101 +357,50 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                     { label: 'Wash', cust: data.customer_wash_comments, qa: data.qa_wash_comments },
                     { label: 'Fabric', cust: data.customer_fabric_comments, qa: data.qa_fabric_comments },
                     { label: 'Accessories', cust: data.customer_accessories_comments, qa: data.qa_accessories_comments },
-                ].map((item, idx) => {
-                    if (!item.cust && !item.qa) return null;
-                    return (
-                        <View key={idx} style={styles.commentBlock}>
-                            <Text style={styles.commentLabel}>{item.label}:</Text>
-                            {item.cust && <Text style={styles.custComment}>Customer: {item.cust}</Text>}
-                            {item.qa && <Text style={styles.qaComment}>QA: {item.qa}</Text>}
-                        </View>
-                    );
-                })}
+                ].map((item, idx) => (
+                    <View key={idx} style={styles.commentBlock}>
+                        <Text style={styles.commentLabel}>{item.label}:</Text>
+                        {/* Only show QA comment as per reference image ("QA: OK"), 
+                             but if there WAS a customer comment, usually it's shown too. 
+                             Reference image only shows "QA: OK" in blue. 
+                             If we assume this replaces the old logic, we'll focus on the QA part being prominent.
+                        */}
+                        <Text style={styles.qaComment}>QA: {item.qa || 'OK'}</Text>
+                    </View>
+                ))}
 
-                {/* Legacy / General Remarks */}
-                {data.customer_remarks && (
-                    <View style={styles.commentBlock}>
-                        <Text style={styles.commentLabel}>Customer Feedback Summary:</Text>
-                        <Text style={{ fontSize: 9, marginLeft: 10 }}>{data.customer_remarks}</Text>
-                    </View>
-                )}
-                {data.remarks && (
-                    <View style={styles.commentBlock}>
-                        <Text style={styles.commentLabel}>Final Remarks:</Text>
-                        <Text style={{ fontSize: 9, marginLeft: 10 }}>{data.remarks}</Text>
-                    </View>
-                )}
+                {/* Footers */}
+                <View>
+                    <Text style={styles.finalRemarksLabel}>Customer Feedback Summary:</Text>
+                    <Text style={styles.finalRemarksText}>{data.customer_remarks || 'NA'}</Text>
+                </View>
+
+                <View>
+                    <Text style={styles.finalRemarksLabel}>Final Remarks:</Text>
+                    <Text style={styles.finalRemarksText}>{data.remarks || 'OK to send'}</Text>
+                </View>
 
             </Page>
 
-            {/* Page 2: Fabric, Accessories, Images */}
-            <Page size="LETTER" style={styles.page}>
-
-                {/* Fabric Check */}
-                <Text style={styles.sectionTitle}>Fabric Check:</Text>
-                <View style={styles.checkRow}>
-                    <Text style={styles.checkLabel}>Handfeel:</Text>
-                    <Text style={(!data.fabric_handfeel || data.fabric_handfeel === 'OK') ? styles.green : styles.red}>
-                        {data.fabric_handfeel || 'OK'}
-                    </Text>
-                </View>
-                <View style={styles.checkRow}>
-                    <Text style={styles.checkLabel}>Pilling:</Text>
-                    <Text style={
-                        data.fabric_pilling === 'High' ? styles.red :
-                            data.fabric_pilling === 'Low' ? styles.orange : styles.green
-                    }>
-                        {data.fabric_pilling || 'None'}
-                    </Text>
-                </View>
-
-                {data.accessories_data && data.accessories_data.length > 0 && (
-                    <View>
-                        <Text style={styles.sectionTitle}>Accessories Checklist:</Text>
-                        <View style={styles.accTable}>
-                            <View style={styles.accRow}>
-                                <Text style={[styles.accHeader, { width: '50%' }]}>Item</Text>
-                                <Text style={[styles.accHeader, { width: '50%' }]}>Remarks</Text>
-                            </View>
-                            {data.accessories_data.map((item: any, i: number) => (
-                                <View key={i} style={styles.accRow}>
-                                    <Text style={[styles.accCell, { width: '50%' }]}>{item.name}</Text>
-                                    <Text style={[styles.accCell, { width: '50%' }]}>{item.comment}</Text>
-                                </View>
-                            ))}
-                        </View>
-                    </View>
-                )}
-
-                {/* Customer Comments Addressed */}
-                <View style={{ marginTop: 20, flexDirection: 'row' }}>
-                    <Text style={styles.bold}>Customer Comments Addressed: </Text>
-                    {data.customer_comments_addressed ?
-                        <Text style={[styles.green, styles.bold, { marginLeft: 10 }]}>✓ YES</Text> :
-                        <Text style={[styles.orange, styles.bold, { marginLeft: 10 }]}>○ NO</Text>
-                    }
-                </View>
-
-                {/* Images */}
-                <Text style={[styles.sectionTitle, { marginTop: 30 }]}>INSPECTION IMAGES</Text>
-                {images && images.filter(img => img.file).length > 0 ? (
+            {/* Page 2: Images (if any) */}
+            {images && images.filter(img => img.file).length > 0 && (
+                <Page size="LETTER" style={styles.page}>
+                    <Text style={[styles.sectionTitle, { marginTop: 0 }]}>INSPECTION IMAGES</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                         {images.filter(img => img.file).map((img, i) => (
                             <View key={i} style={{ width: '45%', marginBottom: 20 }}>
                                 <Image
                                     src={img.file}
-                                    style={{ width: '100%', height: 150, objectFit: 'contain', backgroundColor: '#f0f0f0' }}
+                                    style={{ width: '100%', height: 200, objectFit: 'contain', backgroundColor: '#f0f0f0' }}
                                 />
-                                <Text style={{ fontSize: 8, marginTop: 5, textAlign: 'center' }}>
+                                <Text style={{ fontSize: 9, marginTop: 5, textAlign: 'center' }}>
                                     {img.caption || `Image ${i + 1}`}
                                 </Text>
                             </View>
                         ))}
                     </View>
-                ) : (
-                    <Text>No photos attached.</Text>
-                )}
-            </Page>
+                </Page>
+            )}
         </Document>
     );
 };
