@@ -4,7 +4,7 @@ import api from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
-import { Dialog, DialogContent } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Card, CardContent } from '../components/ui/card';
 import { Download, Plus, Search, Pencil, Trash2, FileText } from 'lucide-react';
 import { useToast } from '../components/ui/use-toast';
@@ -42,10 +42,30 @@ export default function FinalInspections() {
   const [resultFilter, setResultFilter] = useState<string>('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<string | null>(null);
+  const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
   const [page, setPage] = useState(1);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canCreateInspections, canEditFinalInspection, isReadOnly } = useAuth();
+
+  const handleCloseAttempt = (open: boolean) => {
+    if (!open && isFormOpen) {
+      // User is trying to close the dialog
+      setShowCloseConfirmation(true);
+    } else {
+      setIsFormOpen(open);
+    }
+  };
+
+  const handleConfirmClose = () => {
+    setShowCloseConfirmation(false);
+    setIsFormOpen(false);
+    setSelectedInspection(null);
+  };
+
+  const handleCancelClose = () => {
+    setShowCloseConfirmation(false);
+  };
 
 
   // Fetch final inspections with pagination
@@ -258,7 +278,7 @@ export default function FinalInspections() {
       )}
 
       {/* Form Dialog */}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog open={isFormOpen} onOpenChange={handleCloseAttempt}>
         <DialogContent className="max-w-full w-screen h-screen overflow-y-auto rounded-none p-0">
           <FinalInspectionForm
             inspectionId={selectedInspection || undefined}
@@ -267,6 +287,27 @@ export default function FinalInspections() {
               setSelectedInspection(null);
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Confirmation Dialog */}
+      <Dialog open={showCloseConfirmation} onOpenChange={setShowCloseConfirmation}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Close Final Inspection?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to close the form? Unsaved changes will be lost.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={handleCancelClose}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmClose}>
+              Yes, Close
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

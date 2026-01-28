@@ -1023,7 +1023,7 @@ const EvaluationForm = () => {
                                         {/* Measurements Grid (Dynamic Samples) */}
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between">
-                                                <Label>Measurements (Hold & Drag to Select Multiple • Delete/Backspace to Clear)</Label>
+                                                <Label>Measurements </Label>
                                                 <div className="flex gap-2">
                                                     <Button
                                                         type="button"
