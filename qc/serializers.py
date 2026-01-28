@@ -353,16 +353,17 @@ class StyleLinkSerializer(serializers.ModelSerializer):
 class SampleCommentSerializer(serializers.ModelSerializer):
     """Serializer for sample comments by type."""
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    sample_number_display = serializers.CharField(source='get_sample_number_display', read_only=True)
     
     class Meta:
         model = SampleComment
         fields = [
-            'id', 'sample_type',
+            'id', 'sample_type', 'sample_number', 'sample_number_display',
             'comments_general', 'comments_fit', 'comments_workmanship',
             'comments_wash', 'comments_fabric', 'comments_accessories',
             'created_at', 'updated_at', 'created_by_username'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by_username']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by_username', 'sample_number_display']
 
 
 class StyleMasterListSerializer(serializers.ModelSerializer):

@@ -622,7 +622,7 @@ class StyleMaster(models.Model):
 class SampleComment(models.Model):
     """
     Customer comments on a specific sample type for a Style.
-    Each sample type (Fit, PP, Size Set, TOP) can have its own set of comments.
+    Each sample type (Fit, PP, Size Set, TOP) can have multiple submissions (1st, 2nd, etc.).
     """
     SAMPLE_TYPE_CHOICES = [
         ('Fit Sample', 'Fit Sample'),
@@ -631,9 +631,18 @@ class SampleComment(models.Model):
         ('Top of Production', 'Top of Production'),
     ]
 
+    SAMPLE_NUMBER_CHOICES = [
+        (1, '1st Sample'),
+        (2, '2nd Sample'),
+        (3, '3rd Sample'),
+        (4, '4th Sample'),
+        (5, '5th Sample'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     style = models.ForeignKey(StyleMaster, on_delete=models.CASCADE, related_name='comments')
     sample_type = models.CharField(max_length=50, choices=SAMPLE_TYPE_CHOICES)
+    sample_number = models.PositiveSmallIntegerField(choices=SAMPLE_NUMBER_CHOICES, default=1, help_text="Which submission number (1st, 2nd, etc.)")
     
     # Comment fields matching the Evaluation Form categories
     comments_general = models.TextField(blank=True, verbose_name="General Customer Feedback")
@@ -648,12 +657,12 @@ class SampleComment(models.Model):
     created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ['-sample_number', '-created_at']  # Latest sample number first
         verbose_name = "Sample Comment"
         verbose_name_plural = "Sample Comments"
 
     def __str__(self):
-        return f"{self.style.po_number} - {self.sample_type}"
+        return f"{self.style.po_number} - {self.sample_type} ({self.get_sample_number_display()})"
 
 
 class StyleLink(models.Model):

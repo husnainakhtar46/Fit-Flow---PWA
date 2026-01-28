@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Trash2, Search, ExternalLink, Edit2, ChevronLeft, X, Save, Link as LinkIcon, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Search, ExternalLink, Edit2, ChevronLeft, X, Save, Link as LinkIcon, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -41,6 +41,8 @@ interface StyleLink {
 interface SampleComment {
     id?: string;
     sample_type: string;
+    sample_number: number;
+    sample_number_display?: string;
     comments_general: string;
     comments_fit: string;
     comments_workmanship: string;
@@ -72,6 +74,14 @@ const SAMPLE_TYPES = [
     'Top of Production',
 ];
 
+const SAMPLE_NUMBERS = [
+    { value: 1, label: '1st Sample' },
+    { value: 2, label: '2nd Sample' },
+    { value: 3, label: '3rd Sample' },
+    { value: 4, label: '4th Sample' },
+    { value: 5, label: '5th Sample' },
+];
+
 const StyleCycle = () => {
     const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
@@ -81,6 +91,7 @@ const StyleCycle = () => {
     const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
     const [newLink, setNewLink] = useState({ label: '', url: '' });
     const [editingComment, setEditingComment] = useState<SampleComment | null>(null);
+    const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
 
     // Form state for new style
     const [newStyle, setNewStyle] = useState({
@@ -213,20 +224,42 @@ const StyleCycle = () => {
         },
     });
 
-    // Get current comment for active tab
-    const getCurrentComment = (): SampleComment | undefined => {
-        if (!styleDetails?.comments) return undefined;
-        return styleDetails.comments.find((c: SampleComment) => c.sample_type === activeTab);
+    // Get comments for active tab (sorted by sample_number descending)
+    const getCommentsForTab = (): SampleComment[] => {
+        if (!styleDetails?.comments) return [];
+        return styleDetails.comments
+            .filter((c: SampleComment) => c.sample_type === activeTab)
+            .sort((a: SampleComment, b: SampleComment) => b.sample_number - a.sample_number);
+    };
+
+    // Get used sample numbers for current tab
+    const getUsedSampleNumbers = (): number[] => {
+        if (!styleDetails?.comments) return [];
+        return styleDetails.comments
+            .filter((c: SampleComment) => c.sample_type === activeTab)
+            .map((c: SampleComment) => c.sample_number);
     };
 
     const handleSelectStyle = (style: StyleMaster) => {
         setSelectedStyle(style);
         setActiveTab('Fit Sample');
+        setExpandedComments(new Set());
     };
 
     const handleCreateComment = () => {
+        const usedNumbers = getUsedSampleNumbers();
+        // Find next available sample number
+        let nextNumber = 1;
+        for (let i = 1; i <= 5; i++) {
+            if (!usedNumbers.includes(i)) {
+                nextNumber = i;
+                break;
+            }
+        }
+
         const newComment: SampleComment = {
             sample_type: activeTab,
+            sample_number: nextNumber,
             comments_general: '',
             comments_fit: '',
             comments_workmanship: '',
@@ -246,6 +279,18 @@ const StyleCycle = () => {
         saveCommentMutation.mutate({
             styleId: selectedStyle.id,
             comment: editingComment,
+        });
+    };
+
+    const toggleCommentExpanded = (id: string) => {
+        setExpandedComments(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) {
+                newSet.delete(id);
+            } else {
+                newSet.add(id);
+            }
+            return newSet;
         });
     };
 
@@ -407,7 +452,8 @@ const StyleCycle = () => {
     }
 
     // Detail View
-    const currentComment = getCurrentComment();
+    const tabComments = getCommentsForTab();
+    const usedSampleNumbers = getUsedSampleNumbers();
 
     return (
         <div className="space-y-6">
@@ -443,19 +489,24 @@ const StyleCycle = () => {
             {/* Sample Type Tabs */}
             <div className="flex gap-2 border-b border-gray-200 pb-2 overflow-x-auto">
                 {SAMPLE_TYPES.map((type) => {
-                    const hasComment = styleDetails?.comments?.some((c: SampleComment) => c.sample_type === type);
+                    const commentCount = styleDetails?.comments?.filter((c: SampleComment) => c.sample_type === type).length || 0;
                     return (
                         <button
                             key={type}
-                            onClick={() => setActiveTab(type)}
+                            onClick={() => {
+                                setActiveTab(type);
+                                setEditingComment(null);
+                            }}
                             className={`px-4 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors ${activeTab === type
-                                    ? 'bg-primary text-white'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                ? 'bg-primary text-white'
+                                : 'text-gray-600 hover:bg-gray-100'
                                 }`}
                         >
                             {type}
-                            {hasComment && (
-                                <span className="ml-2 w-2 h-2 inline-block rounded-full bg-green-500" />
+                            {commentCount > 0 && (
+                                <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-green-500 text-white">
+                                    {commentCount}
+                                </span>
                             )}
                         </button>
                     );
@@ -468,29 +519,47 @@ const StyleCycle = () => {
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="text-lg font-semibold">
-                            Last Sample Feedback ({activeTab})
+                            Sample Feedback ({activeTab})
                         </h2>
-                        {!editingComment && (
-                            <Button
-                                size="sm"
-                                onClick={currentComment ? () => handleEditComment(currentComment) : handleCreateComment}
-                            >
-                                {currentComment ? (
-                                    <>
-                                        <Edit2 className="w-4 h-4 mr-1" /> Edit
-                                    </>
-                                ) : (
-                                    <>
-                                        <Plus className="w-4 h-4 mr-1" /> Add Comments
-                                    </>
-                                )}
+                        {!editingComment && usedSampleNumbers.length < 5 && (
+                            <Button size="sm" onClick={handleCreateComment}>
+                                <Plus className="w-4 h-4 mr-1" /> Add New Sample Comment
                             </Button>
                         )}
                     </div>
 
                     {editingComment ? (
                         /* Edit Mode */
-                        <Card className="p-6 space-y-4">
+                        <Card className="p-6 space-y-4 border-2 border-blue-200">
+                            <div className="flex items-center justify-between pb-2 border-b">
+                                <h3 className="font-semibold text-blue-800">
+                                    {editingComment.id ? 'Edit Comment' : 'New Comment'}
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                    <Label className="text-sm">Sample #</Label>
+                                    <Select
+                                        value={String(editingComment.sample_number)}
+                                        onValueChange={(v) =>
+                                            setEditingComment({ ...editingComment, sample_number: parseInt(v) })
+                                        }
+                                    >
+                                        <SelectTrigger className="w-36">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {SAMPLE_NUMBERS.map((sn) => (
+                                                <SelectItem
+                                                    key={sn.value}
+                                                    value={String(sn.value)}
+                                                    disabled={usedSampleNumbers.includes(sn.value) && editingComment.sample_number !== sn.value}
+                                                >
+                                                    {sn.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
                             <div>
                                 <Label>Customer Feedback Summary (General)</Label>
                                 <Textarea
@@ -567,48 +636,97 @@ const StyleCycle = () => {
                                 </Button>
                             </div>
                         </Card>
-                    ) : currentComment ? (
-                        /* View Mode */
-                        <Card className="p-6 space-y-4">
-                            {[
-                                { label: 'Customer Feedback Summary (General)', value: currentComment.comments_general },
-                                { label: 'Customer Fit Comments', value: currentComment.comments_fit },
-                                { label: 'Customer Workmanship Comments', value: currentComment.comments_workmanship },
-                                { label: 'Customer Wash Comments', value: currentComment.comments_wash },
-                                { label: 'Customer Fabric Comments', value: currentComment.comments_fabric },
-                                { label: 'Customer Accessories Comments', value: currentComment.comments_accessories },
-                            ].map((item) => (
-                                <div key={item.label}>
-                                    <Label className="text-gray-500">{item.label}</Label>
-                                    <p className="mt-1 text-gray-900 whitespace-pre-wrap">
-                                        {item.value || <span className="text-gray-400 italic">No comments</span>}
-                                    </p>
-                                </div>
-                            ))}
-                            <div className="flex justify-between items-center pt-4 border-t text-sm text-gray-500">
-                                <span>
-                                    Last updated: {currentComment.updated_at
-                                        ? new Date(currentComment.updated_at).toLocaleString()
-                                        : 'N/A'}
-                                </span>
-                                <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    onClick={() => {
-                                        if (currentComment.id && confirm('Delete this comment?')) {
-                                            deleteCommentMutation.mutate(currentComment.id);
-                                        }
-                                    }}
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </Card>
+                    ) : tabComments.length > 0 ? (
+                        /* Multiple Comments View - Collapsible */
+                        <div className="space-y-3">
+                            {tabComments.map((comment, index) => {
+                                const isExpanded = expandedComments.has(comment.id || '') || index === 0;
+                                const sampleLabel = comment.sample_number_display || `${comment.sample_number}${['st', 'nd', 'rd', 'th', 'th'][comment.sample_number - 1]} Sample`;
+
+                                return (
+                                    <Card key={comment.id} className="overflow-hidden">
+                                        {/* Collapsible Header */}
+                                        <button
+                                            onClick={() => comment.id && toggleCommentExpanded(comment.id)}
+                                            className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${index === 0
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'bg-gray-200 text-gray-700'
+                                                    }`}>
+                                                    {sampleLabel}
+                                                </span>
+                                                {index === 0 && (
+                                                    <span className="text-xs text-blue-600 font-medium">LATEST</span>
+                                                )}
+                                                <span className="text-sm text-gray-500">
+                                                    {comment.updated_at && new Date(comment.updated_at).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleEditComment(comment);
+                                                    }}
+                                                >
+                                                    <Edit2 className="w-4 h-4" />
+                                                </Button>
+                                                {isExpanded ? (
+                                                    <ChevronUp className="w-5 h-5 text-gray-400" />
+                                                ) : (
+                                                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                                                )}
+                                            </div>
+                                        </button>
+
+                                        {/* Collapsible Content */}
+                                        {isExpanded && (
+                                            <div className="p-4 space-y-4 border-t">
+                                                {[
+                                                    { label: 'Customer Feedback Summary (General)', value: comment.comments_general },
+                                                    { label: 'Customer Fit Comments', value: comment.comments_fit },
+                                                    { label: 'Customer Workmanship Comments', value: comment.comments_workmanship },
+                                                    { label: 'Customer Wash Comments', value: comment.comments_wash },
+                                                    { label: 'Customer Fabric Comments', value: comment.comments_fabric },
+                                                    { label: 'Customer Accessories Comments', value: comment.comments_accessories },
+                                                ].map((item) => (
+                                                    item.value && (
+                                                        <div key={item.label}>
+                                                            <Label className="text-gray-500 text-xs uppercase">{item.label}</Label>
+                                                            <p className="mt-1 text-gray-900 whitespace-pre-wrap">
+                                                                {item.value}
+                                                            </p>
+                                                        </div>
+                                                    )
+                                                ))}
+                                                <div className="flex justify-end pt-2 border-t">
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            if (comment.id && confirm('Delete this comment?')) {
+                                                                deleteCommentMutation.mutate(comment.id);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Trash2 className="w-4 h-4 mr-1" /> Delete
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </Card>
+                                );
+                            })}
+                        </div>
                     ) : (
                         /* Empty State */
                         <Card className="p-12 text-center text-gray-500">
                             <p>No comments for {activeTab} yet.</p>
-                            <p className="text-sm mt-1">Click "Add Comments" to add customer feedback.</p>
+                            <p className="text-sm mt-1">Click "Add New Sample Comment" to add customer feedback.</p>
                         </Card>
                     )}
                 </div>
