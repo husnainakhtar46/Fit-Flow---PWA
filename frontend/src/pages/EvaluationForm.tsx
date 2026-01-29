@@ -478,7 +478,11 @@ const EvaluationForm = () => {
             ) || [3]);
             setSampleCount(maxSampleIndex);
 
-            setImageSlots([{ file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }]);
+            setImageSlots([
+                { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+            ]);
             setShowSearchResults(false);
             setModalSearchTerm('');
             toast.success("Loaded successfully!");

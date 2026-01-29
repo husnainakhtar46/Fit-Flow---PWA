@@ -234,33 +234,39 @@ def get_aql_limits(sample_size, aql_level):
     Returns:
         int: Maximum allowed defects (acceptance number)
     """
-    # ISO 2859-1 AQL Table (simplified for common textile inspection)
+    # ISO 2859-1 AQL Table (Updated from user provided tables)
     # Format: (sample_size, aql_level): acceptance_number
     aql_table = {
+        # Sample Size 2 (for batch 2-8) - Assumed from Level I/Standard
+        (2, 0.0): 0, (2, 1.5): 0, (2, 2.5): 0, (2, 4.0): 0,
+        # Sample Size 3 (for batch 9-15)
+        (3, 0.0): 0, (3, 1.5): 0, (3, 2.5): 0, (3, 4.0): 0,
+        # Sample Size 5 (for batch 16-25)
+        (5, 0.0): 0, (5, 1.5): 0, (5, 2.5): 0, (5, 4.0): 0,
         # Sample Size 8
-        (8, 0.0): 0, (8, 2.5): 0, (8, 4.0): 1,
+        (8, 0.0): 0, (8, 1.5): 0, (8, 2.5): 0, (8, 4.0): 1,
         # Sample Size 13
-        (13, 0.0): 0, (13, 2.5): 1, (13, 4.0): 1,
+        (13, 0.0): 0, (13, 1.5): 0, (13, 2.5): 1, (13, 4.0): 1,
         # Sample Size 20
-        (20, 0.0): 0, (20, 2.5): 1, (20, 4.0): 2,
+        (20, 0.0): 0, (20, 1.5): 1, (20, 2.5): 1, (20, 4.0): 2,
         # Sample Size 32
-        (32, 0.0): 0, (32, 2.5): 1, (32, 4.0): 3,
+        (32, 0.0): 0, (32, 1.5): 1, (32, 2.5): 2, (32, 4.0): 3,
         # Sample Size 50
-        (50, 0.0): 0, (50, 2.5): 2, (50, 4.0): 5,
+        (50, 0.0): 0, (50, 1.5): 2, (50, 2.5): 3, (50, 4.0): 5,
         # Sample Size 80
-        (80, 0.0): 0, (80, 2.5): 3, (80, 4.0): 7,
+        (80, 0.0): 0, (80, 1.5): 3, (80, 2.5): 5, (80, 4.0): 7,
         # Sample Size 125
-        (125, 0.0): 0, (125, 2.5): 5, (125, 4.0): 10,
+        (125, 0.0): 0, (125, 1.5): 5, (125, 2.5): 7, (125, 4.0): 10,
         # Sample Size 200
-        (200, 0.0): 0, (200, 2.5): 7, (200, 4.0): 14,
+        (200, 0.0): 0, (200, 1.5): 7, (200, 2.5): 10, (200, 4.0): 14,
         # Sample Size 315
-        (315, 0.0): 0, (315, 2.5): 10, (315, 4.0): 21,
+        (315, 0.0): 0, (315, 1.5): 10, (315, 2.5): 14, (315, 4.0): 21,
         # Sample Size 500
-        (500, 0.0): 1, (500, 2.5): 14, (500, 4.0): 21,
-        # Sample Size 800
-        (800, 0.0): 1, (800, 2.5): 21, (800, 4.0): 21,
-        # Sample Size 1250
-        (1250, 0.0): 2, (1250, 2.5): 21, (1250, 4.0): 21,
+        (500, 0.0): 1, (500, 1.5): 14, (500, 2.5): 21, (500, 4.0): 21,
+        # Sample Size 800 - Standard tables
+        (800, 0.0): 1, (800, 1.5): 21, (800, 2.5): 21, (800, 4.0): 21,
+        # Sample Size 1250 - Standard tables
+        (1250, 0.0): 2, (1250, 1.5): 21, (1250, 2.5): 21, (1250, 4.0): 21,
     }
     
     return aql_table.get((sample_size, aql_level), 0)
@@ -269,7 +275,7 @@ def get_aql_limits(sample_size, aql_level):
 def calculate_sample_size(order_qty):
     """
     Calculate sample size based on total order quantity.
-    Based on ISO 2859-1 General Inspection Level II.
+    Based on ISO 2859-1 General Inspection Level II (Single Sampling).
     
     Args:
         order_qty: Total order quantity
@@ -278,31 +284,31 @@ def calculate_sample_size(order_qty):
         int: Sample size to inspect
     """
     if order_qty <= 8:
-        return 8
+        return 2  # Level II - Code A (2-8) -> 2
     elif order_qty <= 15:
-        return 8
+        return 3  # Level II - Code B (9-15) -> 3
     elif order_qty <= 25:
-        return 8
+        return 5  # Level II - Code C (16-25) -> 5
     elif order_qty <= 50:
-        return 8
+        return 8  # Level II - Code D (26-50) -> 8
     elif order_qty <= 90:
-        return 13
+        return 13 # Level II - Code E (51-90) -> 13
     elif order_qty <= 150:
-        return 20
+        return 20 # Level II - Code F (91-150) -> 20
     elif order_qty <= 280:
-        return 32
+        return 32 # Level II - Code G (151-280) -> 32
     elif order_qty <= 500:
-        return 50
+        return 50 # Level II - Code H (281-500) -> 50
     elif order_qty <= 1200:
-        return 80
+        return 80 # Level II - Code J (501-1200) -> 80
     elif order_qty <= 3200:
-        return 125
+        return 125 # Level II - Code K (1201-3200) -> 125
     elif order_qty <= 10000:
-        return 200
+        return 200 # Level II - Code L (3201-10000) -> 200
     elif order_qty <= 35000:
-        return 315
+        return 315 # Level II - Code M (10001-35000) -> 315
     elif order_qty <= 150000:
-        return 500
+        return 500 # Level II - Code N (35001-150000) -> 500
     elif order_qty <= 500000:
         return 800
     else:

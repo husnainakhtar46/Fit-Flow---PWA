@@ -1,0 +1,56 @@
+--- Checking Sample Sizes (Level II) ---
+Batch: 2 | Expected: 2 | Got: 2 | MATCH
+Batch: 8 | Expected: 2 | Got: 2 | MATCH
+Batch: 9 | Expected: 3 | Got: 3 | MATCH
+Batch: 15 | Expected: 3 | Got: 3 | MATCH
+Batch: 16 | Expected: 5 | Got: 5 | MATCH
+Batch: 25 | Expected: 5 | Got: 5 | MATCH
+Batch: 26 | Expected: 8 | Got: 8 | MATCH
+Batch: 50 | Expected: 8 | Got: 8 | MATCH
+Batch: 51 | Expected: 13 | Got: 13 | MATCH
+Batch: 90 | Expected: 13 | Got: 13 | MATCH
+Batch: 91 | Expected: 20 | Got: 20 | MATCH
+Batch: 150 | Expected: 20 | Got: 20 | MATCH
+Batch: 151 | Expected: 32 | Got: 32 | MATCH
+Batch: 280 | Expected: 32 | Got: 32 | MATCH
+Batch: 281 | Expected: 50 | Got: 50 | MATCH
+Batch: 500 | Expected: 50 | Got: 50 | MATCH
+Batch: 501 | Expected: 80 | Got: 80 | MATCH
+Batch: 1200 | Expected: 80 | Got: 80 | MATCH
+Batch: 1201 | Expected: 125 | Got: 125 | MATCH
+Batch: 3200 | Expected: 125 | Got: 125 | MATCH
+Batch: 3201 | Expected: 200 | Got: 200 | MATCH
+Batch: 10000 | Expected: 200 | Got: 200 | MATCH
+Batch: 10001 | Expected: 315 | Got: 315 | MATCH
+Batch: 35000 | Expected: 315 | Got: 315 | MATCH
+Batch: 35001 | Expected: 500 | Got: 500 | MATCH
+Batch: 150000 | Expected: 500 | Got: 500 | MATCH
+
+--- Checking AQL Limits (Image 3) ---
+Size: 13, AQL: 1.5 | Expected: 0 | Got: 0 | MATCH
+Size: 20, AQL: 1.5 | Expected: 1 | Got: 1 | MATCH
+Size: 32, AQL: 1.5 | Expected: 1 | Got: 1 | MATCH
+Size: 50, AQL: 1.5 | Expected: 2 | Got: 2 | MATCH
+Size: 80, AQL: 1.5 | Expected: 3 | Got: 3 | MATCH
+Size: 125, AQL: 1.5 | Expected: 5 | Got: 5 | MATCH
+Size: 200, AQL: 1.5 | Expected: 7 | Got: 7 | MATCH
+Size: 315, AQL: 1.5 | Expected: 10 | Got: 10 | MATCH
+Size: 500, AQL: 1.5 | Expected: 14 | Got: 14 | MATCH
+Size: 13, AQL: 2.5 | Expected: 1 | Got: 1 | MATCH
+Size: 20, AQL: 2.5 | Expected: 1 | Got: 1 | MATCH
+Size: 32, AQL: 2.5 | Expected: 2 | Got: 2 | MATCH
+Size: 50, AQL: 2.5 | Expected: 3 | Got: 3 | MATCH
+Size: 80, AQL: 2.5 | Expected: 5 | Got: 5 | MATCH
+Size: 125, AQL: 2.5 | Expected: 7 | Got: 7 | MATCH
+Size: 200, AQL: 2.5 | Expected: 10 | Got: 10 | MATCH
+Size: 315, AQL: 2.5 | Expected: 14 | Got: 14 | MATCH
+Size: 500, AQL: 2.5 | Expected: 21 | Got: 21 | MATCH
+Size: 13, AQL: 4.0 | Expected: 1 | Got: 1 | MATCH
+Size: 20, AQL: 4.0 | Expected: 2 | Got: 2 | MATCH
+Size: 32, AQL: 4.0 | Expected: 3 | Got: 3 | MATCH
+Size: 50, AQL: 4.0 | Expected: 5 | Got: 5 | MATCH
+Size: 80, AQL: 4.0 | Expected: 7 | Got: 7 | MATCH
+Size: 125, AQL: 4.0 | Expected: 10 | Got: 10 | MATCH
+Size: 200, AQL: 4.0 | Expected: 14 | Got: 14 | MATCH
+Size: 315, AQL: 4.0 | Expected: 21 | Got: 21 | MATCH
+Size: 500, AQL: 4.0 | Expected: 21 | Got: 21 | MATCH

@@ -686,24 +686,68 @@ const StyleCycle = () => {
 
                                         {/* Collapsible Content */}
                                         {isExpanded && (
-                                            <div className="p-4 space-y-4 border-t">
-                                                {[
-                                                    { label: 'Customer Feedback Summary (General)', value: comment.comments_general },
-                                                    { label: 'Customer Fit Comments', value: comment.comments_fit },
-                                                    { label: 'Customer Workmanship Comments', value: comment.comments_workmanship },
-                                                    { label: 'Customer Wash Comments', value: comment.comments_wash },
-                                                    { label: 'Customer Fabric Comments', value: comment.comments_fabric },
-                                                    { label: 'Customer Accessories Comments', value: comment.comments_accessories },
-                                                ].map((item) => (
-                                                    item.value && (
-                                                        <div key={item.label}>
-                                                            <Label className="text-gray-500 text-xs uppercase">{item.label}</Label>
-                                                            <p className="mt-1 text-gray-900 whitespace-pre-wrap">
-                                                                {item.value}
-                                                            </p>
-                                                        </div>
-                                                    )
-                                                ))}
+                                            <div className="p-4 space-y-4 border-t bg-gray-50/50">
+                                                <div className="grid gap-4">
+                                                    {[
+                                                        {
+                                                            label: 'General Feedback',
+                                                            value: comment.comments_general,
+                                                            color: 'text-blue-600',
+                                                            bg: 'bg-blue-50',
+                                                            border: 'border-blue-100'
+                                                        },
+                                                        {
+                                                            label: 'Fit Comments',
+                                                            value: comment.comments_fit,
+                                                            color: 'text-indigo-600',
+                                                            bg: 'bg-indigo-50',
+                                                            border: 'border-indigo-100'
+                                                        },
+                                                        {
+                                                            label: 'Workmanship',
+                                                            value: comment.comments_workmanship,
+                                                            color: 'text-amber-600',
+                                                            bg: 'bg-amber-50',
+                                                            border: 'border-amber-100'
+                                                        },
+                                                        {
+                                                            label: 'Wash Comments',
+                                                            value: comment.comments_wash,
+                                                            color: 'text-cyan-600',
+                                                            bg: 'bg-cyan-50',
+                                                            border: 'border-cyan-100'
+                                                        },
+                                                        {
+                                                            label: 'Fabric Comments',
+                                                            value: comment.comments_fabric,
+                                                            color: 'text-purple-600',
+                                                            bg: 'bg-purple-50',
+                                                            border: 'border-purple-100'
+                                                        },
+                                                        {
+                                                            label: 'Accessories',
+                                                            value: comment.comments_accessories,
+                                                            color: 'text-rose-600',
+                                                            bg: 'bg-rose-50',
+                                                            border: 'border-rose-100'
+                                                        },
+                                                    ].map((item) => (
+                                                        item.value && (
+                                                            <div key={item.label} className={`rounded-xl border ${item.border} ${item.bg} overflow-hidden`}>
+                                                                <div className="px-4 py-2 border-b border-black/5 flex items-center gap-2">
+                                                                    <h4 className={`font-semibold text-sm ${item.color}`}>
+                                                                        {item.label}
+                                                                    </h4>
+                                                                </div>
+                                                                <div className="p-4 bg-white/50">
+                                                                    <p className="text-gray-800 leading-relaxed whitespace-pre-wrap text-[15px]">
+                                                                        {item.value}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    ))}
+                                                </div>
                                                 <div className="flex justify-end pt-2 border-t">
                                                     <Button
                                                         variant="destructive"
