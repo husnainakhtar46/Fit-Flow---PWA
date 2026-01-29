@@ -94,6 +94,10 @@ const StyleCycle = () => {
     const [editingComment, setEditingComment] = useState<SampleComment | null>(null);
     const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
 
+    // Check user role
+    const userType = localStorage.getItem('user_type');
+    const isQA = userType === 'qa';
+
     // Form state for new style
     const [newStyle, setNewStyle] = useState({
         po_number: '',
@@ -301,10 +305,12 @@ const StyleCycle = () => {
             <div className="space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <h1 className="text-3xl font-bold text-gray-900">Style Cycle</h1>
-                    <Button onClick={() => setIsCreateOpen(true)}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        New Style
-                    </Button>
+                    {!isQA && (
+                        <Button onClick={() => setIsCreateOpen(true)}>
+                            <Plus className="w-4 h-4 mr-2" />
+                            New Style
+                        </Button>
+                    )}
                 </div>
 
                 {/* Search */}
@@ -477,6 +483,8 @@ const StyleCycle = () => {
                 <Button
                     variant="destructive"
                     size="sm"
+                    disabled={isQA}
+                    className={isQA ? 'hidden' : ''}
                     onClick={() => {
                         if (confirm('Are you sure you want to delete this style?')) {
                             deleteStyleMutation.mutate(selectedStyle.id);
@@ -522,7 +530,7 @@ const StyleCycle = () => {
                         <h2 className="text-lg font-semibold">
                             Sample Feedback ({activeTab})
                         </h2>
-                        {!editingComment && usedSampleNumbers.length < 5 && (
+                        {!isQA && !editingComment && usedSampleNumbers.length < 5 && (
                             <Button size="sm" onClick={handleCreateComment}>
                                 <Plus className="w-4 h-4 mr-1" /> Add New Sample Comment
                             </Button>
@@ -666,16 +674,18 @@ const StyleCycle = () => {
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleEditComment(comment);
-                                                    }}
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </Button>
+                                                {!isQA && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleEditComment(comment);
+                                                        }}
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </Button>
+                                                )}
                                                 {isExpanded ? (
                                                     <ChevronUp className="w-5 h-5 text-gray-400" />
                                                 ) : (
@@ -748,19 +758,21 @@ const StyleCycle = () => {
                                                         )
                                                     ))}
                                                 </div>
-                                                <div className="flex justify-end pt-2 border-t">
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                            if (comment.id && confirm('Delete this comment?')) {
-                                                                deleteCommentMutation.mutate(comment.id);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <Trash2 className="w-4 h-4 mr-1" /> Delete
-                                                    </Button>
-                                                </div>
+                                                {!isQA && (
+                                                    <div className="flex justify-end pt-2 border-t">
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                                if (comment.id && confirm('Delete this comment?')) {
+                                                                    deleteCommentMutation.mutate(comment.id);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Trash2 className="w-4 h-4 mr-1" /> Delete
+                                                        </Button>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </Card>
@@ -780,10 +792,12 @@ const StyleCycle = () => {
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="text-lg font-semibold">Related Links & Documents</h2>
-                        <Button size="sm" onClick={() => setIsLinkDialogOpen(true)}>
-                            <Plus className="w-4 h-4 mr-1" />
-                            Add Link
-                        </Button>
+                        {!isQA && (
+                            <Button size="sm" onClick={() => setIsLinkDialogOpen(true)}>
+                                <Plus className="w-4 h-4 mr-1" />
+                                Add Link
+                            </Button>
+                        )}
                     </div>
 
                     <Card className="divide-y">
@@ -805,17 +819,19 @@ const StyleCycle = () => {
                                         >
                                             <ExternalLink className="w-4 h-4" />
                                         </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => {
-                                                if (link.id && confirm('Delete this link?')) {
-                                                    deleteLinkMutation.mutate(link.id);
-                                                }
-                                            }}
-                                        >
-                                            <X className="w-4 h-4 text-red-500" />
-                                        </Button>
+                                        {!isQA && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => {
+                                                    if (link.id && confirm('Delete this link?')) {
+                                                        deleteLinkMutation.mutate(link.id);
+                                                    }
+                                                }}
+                                            >
+                                                <X className="w-4 h-4 text-red-500" />
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
                             ))
