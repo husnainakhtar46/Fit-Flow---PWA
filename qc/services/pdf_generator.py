@@ -67,63 +67,117 @@ def generate_pdf_buffer(inspection):
     y_pos -= 30
 
     # Table Header (6 Samples)
+    # Calculate Max Samples Used
+    all_measurements = list(inspection.measurements.all()) # Evaluate queryset once
+    max_sample_index = 3 # Default min
+    for m in all_measurements:
+        # Pre-fetch samples for efficiency
+        s_indices = [s.index for s in m.samples.all()]
+        if s_indices:
+            max_sample_index = max(max_sample_index, max(s_indices))
+    
+    # Cap at some reasonable number if needed, but requirements say dynamic
+    # Let's assume standard max is 6, but we handle whatever. 
+    # If > 10, layout might break, but 6 is the norm.
+    
+    # Column configuration
+    page_width_printable = 500 # 50 to 550
+    col_width_std = 30
+    col_width_tol = 30
+    col_width_sample = 35
+    
+    total_sample_width = max_sample_index * col_width_sample
+    pom_width = page_width_printable - col_width_std - col_width_tol - total_sample_width
+    
+    # Ensure POM has minimum space (e.g., 100). If not, reduce sample width or warn?
+    # With 6 samples: 30+30 + (6*35) = 270. 500-270 = 230 for POM. Plenty.
+    
+    # X Coordinates
+    x_pom = 50
+    x_tol = x_pom + pom_width
+    x_std = x_tol + col_width_tol
+    x_samples_start = x_std + col_width_std
+    
+    # Header
     y_pos -= 10
     p.setFont("Helvetica-Bold", 8)
     
-    # Coordinates for 6 columns + POM/Tol/Std
-    col_starts = [50, 200, 240, 280, 320, 360, 400, 440, 480]
+    p.drawString(x_pom, y_pos, "POM")
+    p.drawString(x_tol, y_pos, "Tol")
+    p.drawString(x_std, y_pos, "Std")
     
-    p.drawString(col_starts[0], y_pos, "POM")
-    p.drawString(col_starts[1], y_pos, "Tol")
-    p.drawString(col_starts[2], y_pos, "Std")
-    p.drawString(col_starts[3], y_pos, "S1")
-    p.drawString(col_starts[4], y_pos, "S2")
-    p.drawString(col_starts[5], y_pos, "S3")
-    p.drawString(col_starts[6], y_pos, "S4")
-    p.drawString(col_starts[7], y_pos, "S5")
-    p.drawString(col_starts[8], y_pos, "S6")
-    
+    for i in range(max_sample_index):
+        p.drawString(x_samples_start + (i * col_width_sample), y_pos, f"S{i+1}")
+        
     y_pos -= 2
     p.line(50, y_pos, 550, y_pos)
     y_pos -= 12
-
-    # Measurements Table
+    
+    # Measurements Loop
     p.setFont("Helvetica", 8)
-    for m in inspection.measurements.all():
-        # Helper to draw value and apply red color if out of tolerance
-        def draw_value(x, value, std, tol):
-            val = float(value) if value is not None and value != '' else None
-            if val is not None and std is not None and tol is not None:
-                if abs(val - std) > tol:
-                    p.setFillColorRGB(1, 0, 0) # Red
-                else:
-                    p.setFillColorRGB(0, 0, 0) # Black
-                p.drawString(x, y_pos, str(val))
-            else:
-                p.setFillColorRGB(0, 0, 0)
-                p.drawString(x, y_pos, '-')
-        
-        p.setFillColorRGB(0, 0, 0)
-        pom_display = (m.pom_name[:30] + '..') if len(m.pom_name) > 30 else m.pom_name
-        p.drawString(col_starts[0], y_pos, pom_display)
-        p.drawString(col_starts[1], y_pos, str(m.tol))
-        p.drawString(col_starts[2], y_pos, str(m.std) if m.std is not None else '-')
-
-        # Fetch samples from related objects
-        # m.samples.all() should be prefetched in view
+    
+    # Helper for wrapping text
+    from reportlab.lib.utils import simpleSplit
+    
+    for m in all_measurements:
+        # Prepare Data
         samples_dict = {s.index: s.value for s in m.samples.all()}
-
-        draw_value(col_starts[3], samples_dict.get(1), m.std, m.tol)
-        draw_value(col_starts[4], samples_dict.get(2), m.std, m.tol)
-        draw_value(col_starts[5], samples_dict.get(3), m.std, m.tol)
-        draw_value(col_starts[6], samples_dict.get(4), m.std, m.tol)
-        draw_value(col_starts[7], samples_dict.get(5), m.std, m.tol)
-        draw_value(col_starts[8], samples_dict.get(6), m.std, m.tol)
         
-        y_pos -= 12
-        if y_pos < 50:
+        # Wrapped POM Text
+        pom_text = m.pom_name
+        # Estimate char width ~ 4px for font size 8? No, simpleSplit is better.
+        # simpleSplit(text, fontName, fontSize, maxWidth)
+        wrapped_lines = simpleSplit(pom_text, "Helvetica", 8, pom_width - 5)
+        
+        row_height = max(12, len(wrapped_lines) * 10) # 10pts per line
+        
+        # Check Page Break
+        if y_pos - row_height < 50:
             p.showPage()
             y_pos = height - 50
+            # Redraw Header
+            p.setFont("Helvetica-Bold", 8)
+            p.drawString(x_pom, y_pos, "POM")
+            p.drawString(x_tol, y_pos, "Tol")
+            p.drawString(x_std, y_pos, "Std")
+            for i in range(max_sample_index):
+                p.drawString(x_samples_start + (i * col_width_sample), y_pos, f"S{i+1}")
+            y_pos -= 14
+            p.setFont("Helvetica", 8)
+
+        # Draw POM (Multi-line)
+        text_y = y_pos
+        for line in wrapped_lines:
+            p.drawString(x_pom, text_y, line)
+            text_y -= 10
+            
+        # Draw Fixed Columns (Tol, Std)
+        # Center vertically in the row? Or top align? Top align is safer for reading.
+        p.drawString(x_tol, y_pos, str(m.tol))
+        p.drawString(x_std, y_pos, str(m.std) if m.std is not None else '-')
+        
+        # Draw Dynamic Samples
+        for i in range(max_sample_index):
+            idx = i + 1
+            val_str = samples_dict.get(idx)
+            x = x_samples_start + (i * col_width_sample)
+            
+            # Validation Logic
+            val = float(val_str) if val_str is not None and val_str != '' else None
+            is_error = False
+            if val is not None and m.std is not None and m.tol is not None:
+                if abs(val - m.std) > m.tol:
+                    is_error = True
+            
+            if is_error:
+                p.setFillColorRGB(1, 0, 0) # Red
+            else:
+                p.setFillColorRGB(0, 0, 0)
+                
+            p.drawString(x, y_pos, str(val) if val is not None else '-')
+            p.setFillColorRGB(0, 0, 0) # Reset
+            
+        y_pos -= (row_height + 4) # Add buffer
 
     p.setFillColorRGB(0, 0, 0)
     
@@ -322,14 +376,36 @@ def generate_pdf_buffer(inspection):
         p.setFont("Helvetica-Bold", 16)
         p.drawString(50, height - 50, "INSPECTION IMAGES")
         
-        positions = [
-            (50, height - 300), (320, height - 300), 
-            (50, height - 550), (320, height - 550)
-        ]
+        img_width = 250
+        img_height = 200
+        col_gap = 20
+        row_gap = 50
         
-        for i, img_obj in enumerate(images[:4]):
-            if i >= 4: break
-            x, y = positions[i]
+        start_y = height - 100 # Top of first row (y_draw = start_y - img_height)
+        current_y = start_y
+        
+        # Filter valid images? existing code iterates images[:4]
+        # We iterate all
+        
+        for i, img_obj in enumerate(images):
+            # 2 columns per row
+            col = i % 2
+            
+            # If starting a new row (and not first image), move down
+            if i > 0 and col == 0:
+                current_y -= (img_height + row_gap)
+            
+            # Check if this row fits
+            # y_draw would be current_y - img_height
+            if current_y - img_height < 50:
+                p.showPage()
+                p.setFont("Helvetica-Bold", 16)
+                p.drawString(50, height - 50, "INSPECTION IMAGES (Cont.)")
+                current_y = start_y
+            
+            x = 50 if col == 0 else 320
+            y = current_y - img_height # Bottom-left corner for drawImage
+
             try:
                 with PILImage.open(img_obj.image.path) as pil_img:
                     if pil_img.mode in ("RGBA", "P"): pil_img = pil_img.convert("RGB")
@@ -338,12 +414,12 @@ def generate_pdf_buffer(inspection):
                     pil_img.save(img_buffer, format='JPEG', quality=85, optimize=True)
                     img_buffer.seek(0)
                     reportlab_img = ImageReader(img_buffer)
-                    p.drawImage(reportlab_img, x, y, width=250, height=200, preserveAspectRatio=True)
+                    p.drawImage(reportlab_img, x, y, width=img_width, height=img_height, preserveAspectRatio=True)
 
                 p.setFont("Helvetica-Bold", 10)
                 p.setFillColorRGB(0, 0, 0)
                 caption = img_obj.caption or "Image"
-                p.drawCentredString(x + 125, y - 15, caption)
+                p.drawCentredString(x + (img_width/2), y - 15, caption)
             except Exception as e:
                 p.drawString(x, y, "Error loading image")
 

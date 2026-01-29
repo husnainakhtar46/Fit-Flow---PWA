@@ -107,6 +107,7 @@ const EvaluationForm = () => {
     const [showSearchResults, setShowSearchResults] = useState(false);
 
     const [imageSlots, setImageSlots] = useState<ImageSlot[]>([
+        { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
         { file: null, caption: '' }, { file: null, caption: '' },
         { file: null, caption: '' }, { file: null, caption: '' },
     ]);
@@ -657,6 +658,31 @@ const EvaluationForm = () => {
 
     // Offline-aware submission handler
     const handleFormSubmit = async (data: any) => {
+        // Validate Mandatory Images (Front & Back View)
+        if (!imageSlots[0].file || !imageSlots[1].file) {
+            toast.error("Please add Front and Back View pictures", { duration: 4000 });
+            return;
+        }
+
+        // Validate Mandatory QA Findings
+        const qaFields = [
+            { key: 'qa_fit_comments', label: 'QA Fit Findings' },
+            { key: 'qa_workmanship_comments', label: 'QA Workmanship Findings' },
+            { key: 'qa_wash_comments', label: 'QA Wash Findings' },
+            { key: 'qa_fabric_comments', label: 'QA Fabric Findings' },
+            { key: 'qa_accessories_comments', label: 'QA Accessories Findings' },
+        ];
+
+        for (const field of qaFields) {
+            if (!data[field.key] || data[field.key].trim() === '') {
+                toast.error(`Please fill ${field.label}`, { duration: 4000 });
+                // Scroll to top of comment section roughly? Or just let user find it. 
+                // Better to scroll to it if possible, but identifying element ID is tricky dynamically without adding IDs.
+                // I will add IDs to them in the next steps or relying on user scroll for now.
+                return;
+            }
+        }
+
         // Validate decision is selected
         if (!data.decision || data.decision === '') {
             setShowDecisionError(true);
@@ -744,7 +770,11 @@ const EvaluationForm = () => {
                 // We reached here, so DB save was definitely successful
                 setIsOpen(false);
                 reset();
-                setImageSlots([{ file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }]);
+                setImageSlots([
+                    { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
+                    { file: null, caption: '' }, { file: null, caption: '' },
+                    { file: null, caption: '' }, { file: null, caption: '' },
+                ]);
                 setIsManualTemplateChange(false);
                 setSelectedTemplate(null);
 
@@ -795,7 +825,11 @@ const EvaluationForm = () => {
             queryClient.invalidateQueries({ queryKey: ['inspections'] });
             setIsOpen(false);
             reset();
-            setImageSlots([{ file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }]);
+            setImageSlots([
+                { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+            ]);
             setSelectedTemplate(null);
             setIsManualTemplateChange(false);
             toast.success('Evaluation created');
@@ -855,14 +889,16 @@ const EvaluationForm = () => {
     const handleImageChange = (index: number, file: File | null) => {
         const newSlots = [...imageSlots];
         newSlots[index].file = file;
-        if (file && !newSlots[index].caption) {
-            if (index === 0) newSlots[index].caption = "Front View";
-            if (index === 1) newSlots[index].caption = "Back View";
-        }
+
+        // Auto-set caption for first 2 if not set (or ensure they stay set)
+        if (index === 0) newSlots[index].caption = "Front View";
+        if (index === 1) newSlots[index].caption = "Back View";
+
         setImageSlots(newSlots);
     };
 
     const handleCaptionChange = (index: number, text: string) => {
+        if (index === 0 || index === 1) return; // Prevent changing mandatory captions
         const newSlots = [...imageSlots];
         newSlots[index].caption = text;
         setImageSlots(newSlots);
@@ -938,7 +974,11 @@ const EvaluationForm = () => {
         setShowCloseConfirmation(false);
         setIsOpen(false);
         reset();
-        setImageSlots([{ file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }, { file: null, caption: '' }]);
+        setImageSlots([
+            { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
+            { file: null, caption: '' }, { file: null, caption: '' },
+            { file: null, caption: '' }, { file: null, caption: '' },
+        ]);
     };
 
     const handleCancelClose = () => {
@@ -1248,7 +1288,7 @@ const EvaluationForm = () => {
                                                     <Textarea {...register("customer_fit_comments")} className="bg-white border-yellow-200 h-14 text-sm" placeholder="Previous customer feedback..." />
                                                 </div>
                                                 <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Fit Findings</Label>
+                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Fit Findings <span className="text-red-500">*</span></Label>
                                                     <Textarea {...register("qa_fit_comments")} className="bg-white border-blue-200 h-14 text-sm" placeholder="Enter QA findings..." />
                                                 </div>
                                             </div>
@@ -1260,7 +1300,7 @@ const EvaluationForm = () => {
                                                     <Textarea {...register("customer_workmanship_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
                                                 </div>
                                                 <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Workmanship Findings</Label>
+                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Workmanship Findings <span className="text-red-500">*</span></Label>
                                                     <Textarea {...register("qa_workmanship_comments")} className="bg-white border-blue-200 h-14 text-sm" />
                                                 </div>
                                             </div>
@@ -1272,7 +1312,7 @@ const EvaluationForm = () => {
                                                     <Textarea {...register("customer_wash_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
                                                 </div>
                                                 <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Wash Findings</Label>
+                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Wash Findings <span className="text-red-500">*</span></Label>
                                                     <Textarea {...register("qa_wash_comments")} className="bg-white border-blue-200 h-14 text-sm" />
                                                 </div>
                                             </div>
@@ -1284,7 +1324,7 @@ const EvaluationForm = () => {
                                                     <Textarea {...register("customer_fabric_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
                                                 </div>
                                                 <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Fabric Findings</Label>
+                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Fabric Findings <span className="text-red-500">*</span></Label>
                                                     <Textarea {...register("qa_fabric_comments")} className="bg-white border-blue-200 h-14 text-sm" />
                                                 </div>
                                             </div>
@@ -1296,7 +1336,7 @@ const EvaluationForm = () => {
                                                     <Textarea {...register("customer_accessories_comments")} className="bg-white border-yellow-200 h-14 text-sm" />
                                                 </div>
                                                 <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Accessories Findings</Label>
+                                                    <Label className="text-blue-800 font-semibold text-sm mb-1 block">QA Accessories Findings <span className="text-red-500">*</span></Label>
                                                     <Textarea {...register("qa_accessories_comments")} className="bg-white border-blue-200 h-14 text-sm" />
                                                 </div>
                                             </div>
@@ -1507,15 +1547,22 @@ const EvaluationForm = () => {
 
                                         {/* Images */}
                                         <div className="space-y-2">
-                                            <Label>Images (Max 4)</Label>
+                                            <Label>Images (Max 6)</Label>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 {imageSlots.map((slot, idx) => (
                                                     <div key={idx} className="border p-3 rounded-md space-y-2 bg-gray-50">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-xs font-bold bg-white border px-2 py-1 rounded">#{idx + 1}</span>
+                                                            {(idx === 0 || idx === 1) && <span className="text-xs text-red-500 font-bold">* Required</span>}
                                                             <Input type="file" accept="image/*" capture="environment" className="text-xs bg-white" onChange={(e) => handleImageChange(idx, e.target.files ? e.target.files[0] : null)} />
                                                         </div>
-                                                        <Input placeholder="Caption" value={slot.caption} onChange={(e) => handleCaptionChange(idx, e.target.value)} className="h-8 text-sm bg-white" />
+                                                        <Input
+                                                            placeholder={idx === 0 ? "Front View" : idx === 1 ? "Back View" : "Caption"}
+                                                            value={slot.caption}
+                                                            onChange={(e) => handleCaptionChange(idx, e.target.value)}
+                                                            className={`h-8 text-sm bg-white ${(idx === 0 || idx === 1) ? 'bg-gray-100 text-gray-600' : ''}`}
+                                                            readOnly={idx === 0 || idx === 1}
+                                                        />
                                                     </div>
                                                 ))}
                                             </div>

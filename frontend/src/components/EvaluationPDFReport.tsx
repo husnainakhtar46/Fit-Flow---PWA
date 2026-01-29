@@ -273,25 +273,46 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                 {/* Measurement Table */}
                 <View style={styles.table}>
                     <View style={styles.tableHeaderRow}>
-                        <Text style={[styles.tableColHeader, styles.colPom]}>POM</Text>
-                        <Text style={[styles.tableColHeader, styles.colTol]}>Tol</Text>
-                        <Text style={[styles.tableColHeader, styles.colStd]}>Std</Text>
-                        {Array.from({ length: maxSamples }, (_, i) => (
-                            <Text key={i} style={[styles.tableColHeader, styles.colSample]}>S{i + 1}</Text>
-                        ))}
+                        {/* Dynamic Column Widths */}
+                        {(() => {
+                            const fixedColWidth = 8; // Tol, Std, Samples
+                            const totalSampleWidth = maxSamples * fixedColWidth;
+                            const pomWidth = 100 - (fixedColWidth * 2) - totalSampleWidth;
+
+                            // Define styles inline to use calculated widths
+                            const stylePom = { width: `${pomWidth}%` };
+                            const styleFixed = { width: `${fixedColWidth}%` };
+
+                            return (
+                                <>
+                                    <Text style={[styles.tableColHeader, stylePom]}>POM</Text>
+                                    <Text style={[styles.tableColHeader, styleFixed]}>Tol</Text>
+                                    <Text style={[styles.tableColHeader, styleFixed]}>Std</Text>
+                                    {Array.from({ length: maxSamples }, (_, i) => (
+                                        <Text key={i} style={[styles.tableColHeader, styleFixed]}>S{i + 1}</Text>
+                                    ))}
+                                </>
+                            );
+                        })()}
                     </View>
                     {data.measurements?.map((m: any, i: number) => {
                         const samples = m.samples || [];
+                        const fixedColWidth = 8;
+                        const totalSampleWidth = maxSamples * fixedColWidth;
+                        const pomWidth = 100 - (fixedColWidth * 2) - totalSampleWidth;
+                        const stylePom = { width: `${pomWidth}%` };
+                        const styleFixed = { width: `${fixedColWidth}%` };
+
                         return (
                             <View key={i} style={styles.tableRow}>
-                                <Text style={[styles.tableCol, styles.colPom]}>{m.pom_name}</Text>
-                                <Text style={[styles.tableCol, styles.colTol]}>{m.tol}</Text>
-                                <Text style={[styles.tableCol, styles.colStd]}>{m.std || '-'}</Text>
+                                <Text style={[styles.tableCol, stylePom]}>{m.pom_name}</Text>
+                                <Text style={[styles.tableCol, styleFixed]}>{m.tol}</Text>
+                                <Text style={[styles.tableCol, styleFixed]}>{m.std || '-'}</Text>
                                 {Array.from({ length: maxSamples }, (_, idx) => {
                                     const sample = samples.find((s: any) => s.index === idx + 1);
                                     const val = sample?.value;
                                     return (
-                                        <Text key={idx} style={[styles.tableCol, styles.colSample, isOutOfTolerance(val, m.std, m.tol) ? styles.red : {}]}>
+                                        <Text key={idx} style={[styles.tableCol, styleFixed, isOutOfTolerance(val, m.std, m.tol) ? styles.red : {}]}>
                                             {val || '-'}
                                         </Text>
                                     );
@@ -394,24 +415,31 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
 
             </Page>
 
-            {/* Page 2: Images (if any) */}
+            {/* Page 2+: Images (Paginated) */}
             {images && images.filter(img => img.file).length > 0 && (
-                <Page size="LETTER" style={styles.page}>
-                    <Text style={[styles.sectionTitle, { marginTop: 0 }]}>INSPECTION IMAGES</Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                        {images.filter(img => img.file).map((img, i) => (
-                            <View key={i} style={{ width: '45%', marginBottom: 20 }}>
-                                <Image
-                                    src={img.file}
-                                    style={{ width: '100%', height: 200, objectFit: 'contain', backgroundColor: '#f0f0f0' }}
-                                />
-                                <Text style={{ fontSize: 9, marginTop: 5, textAlign: 'center' }}>
-                                    {img.caption || `Image ${i + 1}`}
-                                </Text>
+                Array.from({ length: Math.ceil(images.filter(img => img.file).length / 4) }).map((_, pageIdx) => {
+                    const chunk = images.filter(img => img.file).slice(pageIdx * 4, (pageIdx + 1) * 4);
+                    return (
+                        <Page key={pageIdx} size="LETTER" style={styles.page}>
+                            <Text style={[styles.sectionTitle, { marginTop: 0 }]}>
+                                INSPECTION IMAGES {pageIdx > 0 ? '(Cont.)' : ''}
+                            </Text>
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                                {chunk.map((img, i) => (
+                                    <View key={i} style={{ width: '45%', marginBottom: 20 }}>
+                                        <Image
+                                            src={img.file}
+                                            style={{ width: '100%', height: 200, objectFit: 'contain', backgroundColor: '#f0f0f0' }}
+                                        />
+                                        <Text style={{ fontSize: 9, marginTop: 5, textAlign: 'center' }}>
+                                            {img.caption || `Image ${pageIdx * 4 + i + 1}`}
+                                        </Text>
+                                    </View>
+                                ))}
                             </View>
-                        ))}
-                    </View>
-                </Page>
+                        </Page>
+                    );
+                })
             )}
         </Document>
     );
