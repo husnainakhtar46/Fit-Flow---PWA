@@ -842,6 +842,7 @@ const EvaluationForm = () => {
 
     // Validation Logic
     const measurements = watch('measurements');
+    const accessoriesData = watch('accessories_data');
     const checkTol = (val: any, std: any, tol: any) => {
         if (!val || val === '' || !std || std === '') return false;
         const numVal = parseFloat(val);
@@ -1333,9 +1334,19 @@ const EvaluationForm = () => {
 
                                                 {/* Presets Checklist */}
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                                                    {ACCESSORY_PRESETS.map(preset => {
+                                                    {ACCESSORY_PRESETS.map((preset) => {
                                                         const existingIndex = accFields.findIndex(f => f.name === preset);
                                                         const isChecked = existingIndex !== -1;
+                                                        // Use watched value for reactivity
+                                                        const currentVal = isChecked ? (accessoriesData?.[existingIndex]?.comment || '') : '';
+
+                                                        // Helper for styling
+                                                        const getStyle = (val: string) => {
+                                                            if (val === 'Not Ok') return 'text-red-600 font-bold';
+                                                            if (val === 'Available') return 'text-orange-600 font-bold';
+                                                            if (val === 'Ok' || val === 'Improved') return 'text-green-600';
+                                                            return 'text-gray-500';
+                                                        };
 
                                                         return (
                                                             <div key={preset} className={`p-3 rounded-lg border transition-all ${isChecked ? 'bg-white border-blue-200 shadow-sm' : 'bg-gray-100/50 border-transparent hover:bg-gray-100'}`}>
@@ -1346,7 +1357,7 @@ const EvaluationForm = () => {
                                                                         checked={isChecked}
                                                                         onChange={(e) => {
                                                                             if (e.target.checked) {
-                                                                                appendAcc({ name: preset, comment: '' });
+                                                                                appendAcc({ name: preset, comment: 'Ok' }); // Default to Ok
                                                                             } else {
                                                                                 if (existingIndex !== -1) removeAcc(existingIndex);
                                                                             }
@@ -1357,11 +1368,20 @@ const EvaluationForm = () => {
 
                                                                 {isChecked && (
                                                                     <div className="pl-7">
-                                                                        <Input
-                                                                            {...register(`accessories_data.${existingIndex}.comment`)}
-                                                                            placeholder="Comment..."
-                                                                            className="h-7 text-xs bg-gray-50"
-                                                                        />
+                                                                        <Select
+                                                                            value={currentVal}
+                                                                            onValueChange={(val) => setValue(`accessories_data.${existingIndex}.comment`, val, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
+                                                                        >
+                                                                            <SelectTrigger className={`h-7 text-xs bg-gray-50 ${getStyle(currentVal)}`}>
+                                                                                <SelectValue placeholder="Status" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                <SelectItem value="Ok" className="text-green-600">Ok</SelectItem>
+                                                                                <SelectItem value="Not Ok" className="text-red-600 font-bold">Not Ok</SelectItem>
+                                                                                <SelectItem value="Improved" className="text-green-600">Improved</SelectItem>
+                                                                                <SelectItem value="Available" className="text-orange-600 font-bold">Available</SelectItem>
+                                                                            </SelectContent>
+                                                                        </Select>
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -1375,19 +1395,40 @@ const EvaluationForm = () => {
                                                         <Label className="text-sm font-semibold text-gray-700">Custom Items</Label>
                                                         {accFields.map((field, index) => {
                                                             if (ACCESSORY_PRESETS.includes(field.name)) return null; // Skip presets here
+                                                            // Use watched value for reactivity
+                                                            const currentVal = accessoriesData?.[index]?.comment || '';
+
+                                                            // Helper for styling (duplicated for scope, or could be shared)
+                                                            const getStyle = (val: string) => {
+                                                                if (val === 'Not Ok') return 'text-red-600 font-bold';
+                                                                if (val === 'Available') return 'text-orange-600 font-bold';
+                                                                if (val === 'Ok' || val === 'Improved') return 'text-green-600';
+                                                                return 'text-gray-500';
+                                                            };
 
                                                             return (
-                                                                <div key={field.id} className="flex gap-2 items-start bg-white p-2 rounded border border-orange-100 bg-orange-50/30">
+                                                                <div key={field.id} className="flex gap-2 items-center bg-orange-50/30 p-2 rounded border border-orange-100">
                                                                     <Input
                                                                         {...register(`accessories_data.${index}.name`)}
                                                                         placeholder="Item name"
                                                                         className="w-1/3 h-8 text-sm"
                                                                     />
-                                                                    <Input
-                                                                        {...register(`accessories_data.${index}.comment`)}
-                                                                        placeholder="Comment"
-                                                                        className="flex-1 h-8 text-sm"
-                                                                    />
+                                                                    <div className="flex-1">
+                                                                        <Select
+                                                                            value={currentVal}
+                                                                            onValueChange={(val) => setValue(`accessories_data.${index}.comment`, val, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
+                                                                        >
+                                                                            <SelectTrigger className={`h-8 text-sm bg-white ${getStyle(currentVal)}`}>
+                                                                                <SelectValue placeholder="Status" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                <SelectItem value="Ok" className="text-green-600">Ok</SelectItem>
+                                                                                <SelectItem value="Not Ok" className="text-red-600 font-bold">Not Ok</SelectItem>
+                                                                                <SelectItem value="Improved" className="text-green-600">Improved</SelectItem>
+                                                                                <SelectItem value="Available" className="text-orange-600 font-bold">Available</SelectItem>
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </div>
                                                                     <Button
                                                                         type="button"
                                                                         variant="ghost"

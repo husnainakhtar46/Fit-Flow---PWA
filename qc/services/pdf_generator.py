@@ -222,8 +222,28 @@ def generate_pdf_buffer(inspection):
             p.rect(50, y_pos - 15, 500, 15)
             p.drawString(55, y_pos - 12, str(acc.get('name', ''))[:30])
             
-            comment = str(acc.get('comment', ''))[:65]
-            p.drawString(250, y_pos - 12, comment)
+            comment = str(acc.get('comment', ''))
+            
+            # Apply styling based on comment value
+            if comment == 'Not Ok':
+                p.setFillColorRGB(1, 0, 0) # Red
+                p.setFont("Helvetica-Bold", 9)
+            elif comment == 'Available':
+                p.setFillColorRGB(1, 0.5, 0) # Orange
+                p.setFont("Helvetica-Bold", 9)
+            elif comment in ['Ok', 'Improved']:
+                p.setFillColorRGB(0, 0.5, 0) # Green
+                p.setFont("Helvetica", 9)
+            else:
+                p.setFillColorRGB(0, 0, 0) # Black
+                p.setFont("Helvetica", 9)
+
+            p.drawString(250, y_pos - 12, comment[:65])
+            
+            # Reset styles for next iteration
+            p.setFillColorRGB(0, 0, 0)
+            p.setFont("Helvetica", 9)
+            
             y_pos -= 15
         
         y_pos -= 10

@@ -328,10 +328,18 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                         </View>
                         {data.accessories_data.map((item: any, i: number) => {
                             const isLast = i === data.accessories_data.length - 1;
+                            const comment = item.comment || '';
+
+                            // Determine style based on content
+                            let commentStyle = {};
+                            if (comment === 'Not Ok') commentStyle = { color: '#FF0000', fontFamily: 'Helvetica-Bold' };
+                            else if (comment === 'Available') commentStyle = { color: '#FF8000', fontFamily: 'Helvetica-Bold' };
+                            else if (comment === 'Ok' || comment === 'Improved') commentStyle = { color: '#008000' };
+
                             return (
                                 <View key={i} style={isLast ? styles.accRowLast : styles.accRow}>
                                     <Text style={[styles.accCell, { width: '40%' }]}>{item.name}</Text>
-                                    <Text style={[styles.accCellLast, { width: '60%' }]}>{item.comment}</Text>
+                                    <Text style={[styles.accCellLast, { width: '60%' }, commentStyle]}>{comment}</Text>
                                 </View>
                             );
                         })}
