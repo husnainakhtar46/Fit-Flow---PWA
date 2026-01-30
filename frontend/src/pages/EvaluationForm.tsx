@@ -875,7 +875,11 @@ const EvaluationForm = () => {
         mutationFn: async (id: string) => {
             await api.post(`/inspections/${id}/send_email/`, { recipients: [] });
         },
-        onSuccess: () => toast.success('Email sent to customer')
+        onSuccess: () => toast.success('Email sent to customer'),
+        onError: (err: any) => {
+            const errorMsg = err.response?.data?.error || 'Failed to send email';
+            toast.error(errorMsg);
+        }
     });
 
     // Validation Logic

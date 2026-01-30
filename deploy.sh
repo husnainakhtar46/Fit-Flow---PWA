@@ -41,6 +41,17 @@ if [ -z "$SECRET_KEY" ]; then
     echo "✓ Generated secret key"
 fi
 
+# Email Configuration
+echo ""
+echo "📧 Email Configuration (for sending reports):"
+read -p "Email Host [default: smtp.gmail.com]: " EMAIL_HOST
+EMAIL_HOST=${EMAIL_HOST:-smtp.gmail.com}
+read -p "Email Port [default: 587]: " EMAIL_PORT
+EMAIL_PORT=${EMAIL_PORT:-587}
+read -p "Email User (e.g., your@gmail.com): " EMAIL_USER
+read -sp "Email Password (App Password if Gmail): " EMAIL_PASSWORD
+echo ""
+
 echo ""
 echo "================================"
 echo "📋 Configuration Summary:"
@@ -79,6 +90,9 @@ echo -n "$SECRET_KEY" | gcloud secrets create django-secret --data-file=- 2>/dev
 echo -n "$DB_PASSWORD" | gcloud secrets create db-password --data-file=- 2>/dev/null || \
     echo -n "$DB_PASSWORD" | gcloud secrets versions add db-password --data-file=-
 
+echo -n "$EMAIL_PASSWORD" | gcloud secrets create email-password --data-file=- 2>/dev/null || \
+    echo -n "$EMAIL_PASSWORD" | gcloud secrets versions add email-password --data-file=-
+
 # Build and push Docker image
 echo "🐳 Building Docker image..."
 gcloud builds submit --tag gcr.io/$PROJECT_ID/fitflow-backend
@@ -97,8 +111,12 @@ gcloud run deploy fitflow-backend \
     --set-env-vars "DB_USER=$DB_USER" \
     --set-env-vars "GCS_BUCKET_NAME=fitflow-media-$PROJECT_ID" \
     --set-env-vars "GCP_PROJECT_ID=$PROJECT_ID" \
+    --set-env-vars "EMAIL_HOST=$EMAIL_HOST" \
+    --set-env-vars "EMAIL_PORT=$EMAIL_PORT" \
+    --set-env-vars "EMAIL_USER=$EMAIL_USER" \
     --set-secrets "SECRET_KEY=django-secret:latest" \
-    --set-secrets "DB_PASSWORD=db-password:latest"
+    --set-secrets "DB_PASSWORD=db-password:latest" \
+    --set-secrets "EMAIL_PASSWORD=email-password:latest"
 
 # Get service URL
 SERVICE_URL=$(gcloud run services describe fitflow-backend --region us-central1 --format 'value(status.url)')

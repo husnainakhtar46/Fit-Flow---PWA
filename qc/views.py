@@ -118,8 +118,17 @@ class InspectionViewSet(viewsets.ModelViewSet):
         buffer = generate_pdf_buffer(inspection)
         email = EmailMessage(subject, body, settings.EMAIL_HOST_USER, to_emails, cc=cc_emails if cc_emails else None)
         email.attach(f"{inspection.style}_{inspection.po_number}_Report.pdf", buffer.getvalue(), "application/pdf")
-        email.send(fail_silently=False)
-        return Response({"sent": True, "to": to_emails, "cc": cc_emails})
+        
+        try:
+            email.send(fail_silently=False)
+            return Response({"sent": True, "to": to_emails, "cc": cc_emails})
+        except Exception as e:
+            # Catch all email-related exceptions and return a clear error message
+            error_msg = str(e)
+            return Response(
+                {"error": f"Email failed: {error_msg}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=["patch"], permission_classes=[CanAddCustomerFeedback])
     def update_customer_feedback(self, request, pk=None):
