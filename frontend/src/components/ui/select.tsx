@@ -31,7 +31,7 @@ SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
 
 const SelectContent = React.forwardRef<
     React.ElementRef<typeof SelectPrimitive.Content>,
-    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
+    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> & { container?: HTMLElement | null }
 >(({ className, children, position = "popper", container, ...props }, ref) => (
     <SelectPrimitive.Portal container={container}>
         <SelectPrimitive.Content

@@ -23,4 +23,4 @@ COPY . .
 RUN python manage.py collectstatic --noinput
 
 # Run gunicorn
-CMD exec gunicorn --bind :$PORT --workers 2 --threads 4 --timeout 60 config.wsgi:application
+CMD exec gunicorn --bind :$PORT --workers 2 --threads 4 --timeout 60 quality_check.wsgi:application

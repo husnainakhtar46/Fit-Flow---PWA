@@ -1,4 +1,4 @@
-from .settings import *
+from quality_check.settings import *
 import os
 from django.core.exceptions import ImproperlyConfigured
 
@@ -59,15 +59,21 @@ GS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', 'fitflow-media')
 GS_PROJECT_ID = os.environ.get('GCP_PROJECT_ID')
 
 # CORS for frontend
-CORS_ALLOWED_ORIGINS = [
-    'https://storage.googleapis.com',
-    # Add your frontend domain after deployment
-]
+# CORS for frontend
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',')
+if not CORS_ALLOWED_ORIGINS[0]:  # Handle empty string resulting in ['']
+    CORS_ALLOWED_ORIGINS = []
 
+
+# CSRF
 # CSRF
 CSRF_TRUSTED_ORIGINS = [
     'https://*.run.app',
 ]
+csrf_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+if csrf_env[0]:
+    CSRF_TRUSTED_ORIGINS.extend(csrf_env)
+
 
 # Security
 SECURE_SSL_REDIRECT = True

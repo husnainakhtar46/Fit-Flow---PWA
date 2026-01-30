@@ -61,3 +61,10 @@ yarn-debug.log*
 yarn-error.log*
 
 !frontend/src/lib/aqlCalculations.ts
+
+# Deployment
+deployment_guide.md
+deploy_v2.sh
+deploy_v2.ps1
+
+

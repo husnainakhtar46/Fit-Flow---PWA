@@ -9,6 +9,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-dev-key")
 DEBUG = os.getenv("DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,10.118.172.147,192.168.2.108,192.168.137.1").split(",")
+if os.getenv("K_SERVICE"):  # Running on Cloud Run
+    ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
     # default apps...
@@ -51,6 +53,7 @@ WSGI_APPLICATION = "quality_check.wsgi.application"
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # Serve static files in production
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -60,6 +63,8 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://10.118.172.147:5173,http://192.168.2.108:5173,http://192.168.137.1:5173").split(",")
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost:3000").split(",")
+
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -81,15 +86,37 @@ SIMPLE_JWT = {
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 import dj_database_url
 
+# Database
+# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+import dj_database_url
+from urllib.parse import quote_plus
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL and os.getenv("DB_HOST"):
+    # Construct from individual vars (Cloud Run / Vercel style)
+    db_user = os.getenv("DB_USER", "postgres")
+    db_password = os.getenv("DB_PASSWORD", "")
+    db_host = os.getenv("DB_HOST", "localhost")
+    db_port = os.getenv("DB_PORT", "5432")
+    db_name = os.getenv("DB_NAME", "postgres")
+    
+    # Safely encode credentials to handle special chars like '@'
+    safe_user = quote_plus(db_user)
+    safe_password = quote_plus(db_password)
+    
+    DATABASE_URL = f"postgres://{safe_user}:{safe_password}@{db_host}:{db_port}/{db_name}"
+
 DATABASES = {
     'default': dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        default=DATABASE_URL or f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600
     )
 }
 
 # Static & Media
 STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 

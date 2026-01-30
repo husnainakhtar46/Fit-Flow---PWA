@@ -10,6 +10,7 @@ reportlab
 django-storages[boto3]
 python-dotenv
 dj-database-url
+django-filter
 
 # Production dependencies for Cloud Run
 gunicorn==21.2.0

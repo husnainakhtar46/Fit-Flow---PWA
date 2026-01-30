@@ -964,11 +964,11 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     } else {
       // --- ONLINE FLOW (REAL) ---
       try {
-        if (inspectionId) {
-          // If editing an existing report
+        if (inspectionId && submitAction === 'update') {
+          // If editing an existing report AND action is update
           updateMutation.mutate({ id: inspectionId, data: finalPayload as any });
         } else {
-          // If creating a new report
+          // If creating a new report OR 'saveAsNew'
           createMutation.mutate(finalPayload as any);
         }
       } catch (error) {
@@ -1248,7 +1248,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
                                 const sampleNum = sampleIdx + 1;
                                 const key = `s${sampleNum}`;
                                 const sampleValue = getSampleValue(currentPOM as MeasurementInput, sampleNum);
-                                const isBad = isOutOfTolerance(sampleValue, currentPOM.spec, currentPOM.tol);
+                                const isBad = isOutOfTolerance(String(sampleValue ?? ''), currentPOM.spec, currentPOM.tol);
 
                                 return (
                                   <div key={sampleNum}>
