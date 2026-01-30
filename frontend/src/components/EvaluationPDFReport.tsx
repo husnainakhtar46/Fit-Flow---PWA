@@ -393,11 +393,13 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                 ].map((item, idx) => (
                     <View key={idx} style={styles.commentBlock}>
                         <Text style={styles.commentLabel}>{item.label}:</Text>
-                        {/* Only show QA comment as per reference image ("QA: OK"), 
-                             but if there WAS a customer comment, usually it's shown too. 
-                             Reference image only shows "QA: OK" in blue. 
-                             If we assume this replaces the old logic, we'll focus on the QA part being prominent.
-                        */}
+                        {/* Customer comment - brown color to match backend */}
+                        {item.cust && (
+                            <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#996600', marginLeft: 15 }}>
+                                Customer: {item.cust}
+                            </Text>
+                        )}
+                        {/* QA comment - blue color */}
                         <Text style={styles.qaComment}>QA: {item.qa || 'OK'}</Text>
                     </View>
                 ))}

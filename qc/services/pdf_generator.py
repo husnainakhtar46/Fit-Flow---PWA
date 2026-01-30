@@ -350,8 +350,20 @@ def generate_pdf_buffer(inspection):
             if cust_comment:
                 p.setFont("Helvetica-Oblique", 9)
                 p.setFillColorRGB(0.6, 0.4, 0)  # Brown/yellow for customer
-                p.drawString(60, y_pos, "Customer: " + cust_comment[:80])
+                p.drawString(60, y_pos, "Customer:")
                 y_pos -= 12
+                # Handle multi-line comments - split by newlines first, then wrap each line
+                comment_lines = cust_comment.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+                for comment_line in comment_lines:
+                    wrapped_lines = textwrap.wrap(comment_line, width=85) if comment_line.strip() else ['']
+                    for line in wrapped_lines:
+                        if y_pos < 50:
+                            p.showPage()
+                            y_pos = height - 50
+                            p.setFont("Helvetica-Oblique", 9)
+                            p.setFillColorRGB(0.6, 0.4, 0)
+                        p.drawString(70, y_pos, line)
+                        y_pos -= 12
                 p.setFillColorRGB(0, 0, 0)
             
             if qa_comment:
