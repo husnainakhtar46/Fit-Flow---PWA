@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { Plus, Trash2, Edit, Upload, FileSpreadsheet, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Edit, Upload, FileSpreadsheet, Loader2, CheckCircle, AlertCircle, PlusCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../lib/api';
 import Pagination from '../components/Pagination';
@@ -89,7 +89,7 @@ const Templates = () => {
         }
     });
 
-    const { fields, append, remove } = useFieldArray({
+    const { fields, append, remove, insert } = useFieldArray({
         control,
         name: "poms"
     });
@@ -456,6 +456,15 @@ const Templates = () => {
                                                 <Label className="text-xs">Tolerance (+/-)</Label>
                                                 <Input type="number" step="0.1" {...register(`poms.${index}.default_tol` as const)} onPaste={handlePaste(index, 'default_tol')} />
                                             </div>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => insert(index + 1, { name: '', default_tol: 0 })}
+                                                title="Insert row below"
+                                            >
+                                                <PlusCircle className="w-4 h-4 text-green-600" />
+                                            </Button>
                                             <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
                                                 <Trash2 className="w-4 h-4 text-red-500" />
                                             </Button>
