@@ -5,7 +5,8 @@ from django.urls import path, include
 from qc.views import (
     CustomerViewSet, TemplateViewSet, InspectionViewSet, DashboardView, 
     CustomTokenObtainPairView, FilterPresetViewSet, FinalInspectionViewSet,
-    StyleMasterViewSet, SampleCommentViewSet, StyleLinkViewSet
+    StyleMasterViewSet, SampleCommentViewSet, StyleLinkViewSet,
+    ExtractPOMView
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -27,4 +28,6 @@ urlpatterns = [
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path('api/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # POM extraction from PDF/Excel
+    path('api/extract-pom/', ExtractPOMView.as_view(), name='extract-pom'),
 ]

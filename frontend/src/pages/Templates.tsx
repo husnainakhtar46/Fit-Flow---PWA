@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { Plus, Trash2, Edit } from 'lucide-react';
+import { Plus, Trash2, Edit, Upload, FileSpreadsheet, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../lib/api';
 import Pagination from '../components/Pagination';
@@ -37,6 +37,20 @@ type POM = {
     default_tol: number;
 };
 
+type ExtractedPOM = {
+    name: string;
+    default_tol: number;
+    default_std?: number | null;
+};
+
+type ExtractionResponse = {
+    success: boolean;
+    poms?: ExtractedPOM[];
+    matched_columns?: Record<string, string>;
+    confidence_scores?: Record<string, number>;
+    error?: string;
+};
+
 type TemplateForm = {
     name: string;
     description: string;
@@ -56,6 +70,16 @@ const Templates = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState<any>(null);
     const [selectedCustomer, setSelectedCustomer] = useState<string>('all');
+
+    // File extraction state
+    const [isExtracting, setIsExtracting] = useState(false);
+    const [showExtractionPreview, setShowExtractionPreview] = useState(false);
+    const [extractedPoms, setExtractedPoms] = useState<ExtractedPOM[]>([]);
+    const [extractionInfo, setExtractionInfo] = useState<{
+        matchedColumns: Record<string, string>;
+        confidenceScores: Record<string, number>;
+    } | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [page, setPage] = useState(1);
 
     const { register, control, handleSubmit, reset, getValues, setValue } = useForm<TemplateForm>({
@@ -117,6 +141,94 @@ const Templates = () => {
 
             toast.success(`Pasted ${dataRows.length} rows!`);
         }
+    };
+
+    // ==================== File Extraction Handlers ====================
+
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        const allowedTypes = ['.pdf', '.xlsx', '.xls'];
+        const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+        if (!allowedTypes.includes(fileExtension)) {
+            toast.error('Invalid file type. Please upload a PDF or Excel file.');
+            return;
+        }
+
+        setIsExtracting(true);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await api.post<ExtractionResponse>('/api/extract-pom/', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            if (response.data.success && response.data.poms) {
+                setExtractedPoms(response.data.poms);
+                setExtractionInfo({
+                    matchedColumns: response.data.matched_columns || {},
+                    confidenceScores: response.data.confidence_scores || {}
+                });
+                setShowExtractionPreview(true);
+                toast.success(`Extracted ${response.data.poms.length} POMs from file!`);
+            } else {
+                toast.error(response.data.error || 'Failed to extract data from file');
+            }
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.error || 'Failed to process file';
+            toast.error(errorMessage);
+        } finally {
+            setIsExtracting(false);
+            // Reset file input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+
+    const handleApplyExtractedPoms = () => {
+        // Clear existing POMs and add extracted ones
+        const currentPoms = getValues('poms');
+
+        // Remove all existing POMs
+        for (let i = currentPoms.length - 1; i >= 0; i--) {
+            remove(i);
+        }
+
+        // Add extracted POMs
+        const pomsToAdd: POM[] = extractedPoms.map(pom => ({
+            name: pom.name,
+            default_tol: pom.default_tol
+        }));
+
+        append(pomsToAdd);
+
+        // Close preview
+        setShowExtractionPreview(false);
+        setExtractedPoms([]);
+        setExtractionInfo(null);
+
+        toast.success('POMs applied to form!');
+    };
+
+    const handleEditExtractedPom = (index: number, field: 'name' | 'default_tol', value: string) => {
+        setExtractedPoms(prev => {
+            const updated = [...prev];
+            if (field === 'name') {
+                updated[index] = { ...updated[index], name: value };
+            } else {
+                updated[index] = { ...updated[index], default_tol: parseFloat(value) || 0 };
+            }
+            return updated;
+        });
+    };
+
+    const handleRemoveExtractedPom = (index: number) => {
+        setExtractedPoms(prev => prev.filter((_, i) => i !== index));
     };
 
     const { data: templatesData, isLoading, isPlaceholderData } = useQuery<PaginatedResponse<any>>({
@@ -299,12 +411,36 @@ const Templates = () => {
                             </div>
 
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center">
+                                <div className="flex justify-between items-center gap-2 flex-wrap">
                                     <Label>Points of Measure (POM)</Label>
-                                    <Button type="button" variant="outline" size="sm" onClick={() => append({ name: '', default_tol: 0 })}>
-                                        <Plus className="w-4 h-4 mr-2" />
-                                        Add POM
-                                    </Button>
+                                    <div className="flex gap-2">
+                                        {/* Import from File Button */}
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            accept=".pdf,.xlsx,.xls"
+                                            className="hidden"
+                                            onChange={handleFileUpload}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={isExtracting}
+                                        >
+                                            {isExtracting ? (
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            ) : (
+                                                <Upload className="w-4 h-4 mr-2" />
+                                            )}
+                                            Import from File
+                                        </Button>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => append({ name: '', default_tol: 0 })}>
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            Add POM
+                                        </Button>
+                                    </div>
                                 </div>
 
                                 <div className="space-y-2">
@@ -330,6 +466,102 @@ const Templates = () => {
                                 Save Template
                             </Button>
                         </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Extraction Preview Dialog */}
+                <Dialog open={showExtractionPreview} onOpenChange={setShowExtractionPreview}>
+                    <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                                Review Extracted POMs
+                            </DialogTitle>
+                        </DialogHeader>
+
+                        {/* Column Match Info */}
+                        {extractionInfo && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                                <p className="text-sm font-medium text-blue-800 mb-2">Column Matching Results:</p>
+                                <div className="flex flex-wrap gap-3 text-xs">
+                                    {Object.entries(extractionInfo.matchedColumns).map(([field, column]) => (
+                                        <div key={field} className="flex items-center gap-1">
+                                            {extractionInfo.confidenceScores[field] >= 90 ? (
+                                                <CheckCircle className="w-4 h-4 text-green-600" />
+                                            ) : (
+                                                <AlertCircle className="w-4 h-4 text-yellow-600" />
+                                            )}
+                                            <span className="text-gray-600">
+                                                {field === 'name' ? 'Description' : field === 'default_tol' ? 'Tolerance' : field}:
+                                            </span>
+                                            <span className="font-medium text-gray-800">
+                                                "{column}" ({extractionInfo.confidenceScores[field]}%)
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Extracted POMs Table */}
+                        <div className="border rounded-lg overflow-hidden">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-12">#</TableHead>
+                                        <TableHead>POM Name (Description)</TableHead>
+                                        <TableHead className="w-32">Tolerance (+/-)</TableHead>
+                                        <TableHead className="w-16">Action</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {extractedPoms.map((pom, index) => (
+                                        <TableRow key={index}>
+                                            <TableCell className="text-gray-500">{index + 1}</TableCell>
+                                            <TableCell>
+                                                <Input
+                                                    value={pom.name}
+                                                    onChange={(e) => handleEditExtractedPom(index, 'name', e.target.value)}
+                                                    className="border-dashed"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    value={pom.default_tol}
+                                                    onChange={(e) => handleEditExtractedPom(index, 'default_tol', e.target.value)}
+                                                    className="border-dashed"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleRemoveExtractedPom(index)}
+                                                >
+                                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+
+                        {extractedPoms.length === 0 ? (
+                            <p className="text-center text-gray-500 py-4">No POMs to preview</p>
+                        ) : (
+                            <div className="flex justify-end gap-3 mt-4">
+                                <Button variant="outline" onClick={() => setShowExtractionPreview(false)}>
+                                    Cancel
+                                </Button>
+                                <Button onClick={handleApplyExtractedPoms}>
+                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                    Apply {extractedPoms.length} POMs to Form
+                                </Button>
+                            </div>
+                        )}
                     </DialogContent>
                 </Dialog>
             </div>

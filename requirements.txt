@@ -12,6 +12,11 @@ python-dotenv
 dj-database-url
 django-filter
 
+# PDF/Excel extraction for templates
+pdfplumber
+openpyxl
+rapidfuzz
+
 # Production dependencies for Cloud Run
 gunicorn==21.2.0
 whitenoise==6.6.0

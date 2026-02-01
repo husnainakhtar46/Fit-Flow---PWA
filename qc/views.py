@@ -196,6 +196,66 @@ class TemplateViewSet(viewsets.ModelViewSet):
         return queryset
 
 
+# ==================== POM Extraction View ====================
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
+
+class ExtractPOMView(APIView):
+    """
+    API endpoint to extract POM data from PDF or Excel files.
+    
+    POST /api/extract-pom/
+    - Accepts multipart/form-data with 'file' field
+    - Returns extracted POMs with matched column info
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    def post(self, request):
+        from .services.extractor import extract_pom_from_file
+        
+        file = request.FILES.get('file')
+        if not file:
+            return Response(
+                {'success': False, 'error': 'No file provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Read file content
+        try:
+            file_content = file.read()
+            filename = file.name
+        except Exception as e:
+            return Response(
+                {'success': False, 'error': f'Error reading file: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Extract POMs
+        result = extract_pom_from_file(file_content, filename)
+        
+        if result.success:
+            return Response({
+                'success': True,
+                'poms': [
+                    {
+                        'name': pom.name,
+                        'default_tol': pom.default_tol,
+                        'default_std': pom.default_std
+                    }
+                    for pom in result.poms
+                ],
+                'matched_columns': result.matched_columns,
+                'confidence_scores': result.confidence_scores
+            })
+        else:
+            return Response({
+                'success': False,
+                'error': result.error,
+                'matched_columns': result.matched_columns,
+                'confidence_scores': result.confidence_scores
+            }, status=status.HTTP_400_BAD_REQUEST)
+
 class FilterPresetViewSet(viewsets.ModelViewSet):
     """ViewSet for managing user filter presets"""
     serializer_class = FilterPresetSerializer
