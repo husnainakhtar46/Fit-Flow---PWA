@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Check, ChevronsUpDown, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
