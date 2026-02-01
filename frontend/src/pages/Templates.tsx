@@ -165,7 +165,7 @@ const Templates = () => {
         },
         onError: (error: any) => {
             if (error?.response?.data?.name) {
-                toast.error('Template name already exists. Please use a different name.');
+                toast.error('Style name already exists. Please use a different name.');
             } else {
                 toast.error('Failed to create template. Please try again.');
             }
@@ -200,7 +200,7 @@ const Templates = () => {
         },
         onError: (error: any) => {
             if (error?.response?.data?.name) {
-                toast.error('Template name already exists. Please use a different name.');
+                toast.error('Style name already exists. Please use a different name.');
             } else {
                 toast.error('Failed to update template. Please try again.');
             }
@@ -274,8 +274,8 @@ const Templates = () => {
                         </DialogHeader>
                         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
                             <div className="space-y-2">
-                                <Label>Template Name</Label>
-                                <Input {...register("name", { required: true })} placeholder="e.g. T-Shirt Basic" />
+                                <Label>Style Name</Label>
+                                <Input {...register("name", { required: true })} placeholder="e.g. ST-12345" />
                             </div>
 
                             <div className="space-y-2">
@@ -338,7 +338,7 @@ const Templates = () => {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Name</TableHead>
+                            <TableHead>Style Name</TableHead>
                             <TableHead>Customer</TableHead>
                             <TableHead>Description</TableHead>
                             <TableHead>POM Count</TableHead>

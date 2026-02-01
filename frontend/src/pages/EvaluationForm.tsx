@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 
-import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Layers } from 'lucide-react';
+import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Layers, ArrowUpDown } from 'lucide-react';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { toast } from 'sonner';
 import axios from 'axios';
 import api from '../lib/api';
@@ -1091,19 +1092,15 @@ const EvaluationForm = () => {
                                                 </Select>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label>Template</Label>
-                                                <Select
+                                                <Label>Style Template</Label>
+                                                <SearchableSelect
                                                     value={watch("template")}
-                                                    onValueChange={(v) => { setIsManualTemplateChange(true); setValue("template", v); setSelectedTemplate(v); }}
+                                                    onChange={(v) => { setIsManualTemplateChange(true); setValue("template", v); setSelectedTemplate(v); }}
+                                                    options={templates?.filter((t: any) => !watch('customer') || t.customer === watch('customer'))
+                                                        .map((t: any) => ({ value: t.id, label: t.name })) || []}
+                                                    placeholder={watch("customer") ? "Select Style Template..." : "Select Customer First"}
                                                     disabled={!watch("customer")}
-                                                >
-                                                    <SelectTrigger><SelectValue placeholder={watch("customer") ? "Select Template..." : "Select Customer First"} /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {templates?.filter((t: any) => t.customer === watch("customer") || !t.customer).map((t: any) => (
-                                                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
+                                                />
                                             </div>
                                         </div>
 
@@ -1540,6 +1537,7 @@ const EvaluationForm = () => {
                                                             <SelectContent>
                                                                 <SelectItem value="None">None (Good)</SelectItem>
                                                                 <SelectItem value="Low">Low (Acceptable)</SelectItem>
+                                                                <SelectItem value="High">High (Not Acceptable)</SelectItem>
                                                             </SelectContent>
                                                         </Select>
                                                     </div>

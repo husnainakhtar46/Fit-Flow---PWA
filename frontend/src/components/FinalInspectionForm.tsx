@@ -24,6 +24,7 @@ import { db, cacheCustomers, cacheTemplates, getCachedCustomers, getCachedTempla
 import { pdf } from '@react-pdf/renderer';
 import PDFReport from './PDFReport';
 import { saveAs } from 'file-saver';
+import { SearchableSelect } from './SearchableSelect';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
 
@@ -1017,11 +1018,15 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
             <Input type="date" {...register('inspection_date', { required: true })} className="mt-1" />
           </div>
           <div>
-            <Label>Template (For Measurements)</Label>
-            <select {...register('template')} className="w-full border rounded p-2 mt-1">
-              <option value="">Select Template</option>
-              {templates?.filter(t => !watch('customer') || t.customer === watch('customer')).map((t: Template) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <Label>Style Template (For Measurements)</Label>
+            <SearchableSelect
+              value={watch('template')}
+              onChange={(v) => setValue('template', v)}
+              options={templates?.filter((t: any) => !watch('customer') || t.customer === watch('customer'))
+                .map((t: any) => ({ value: t.id, label: t.name })) || []}
+              placeholder={watch("customer") ? "Select Style Template..." : "Select Customer First"}
+              disabled={!watch("customer")}
+            />
           </div>
           <div>
             <Label>Order No *</Label>
@@ -1150,7 +1155,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
         <CardContent>
           {!selectedTemplateId && (
             <div className="text-center p-6 bg-gray-50 rounded border border-dashed text-gray-500">
-              Please select a <strong>Template</strong> in General Information to load measurement points.
+              Please select a <strong>Style Template</strong> in General Information to load measurement points.
             </div>
           )}
 
