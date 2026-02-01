@@ -209,162 +209,174 @@ class POMExtractor:
         Process a table to extract POM data.
         First row is assumed to be headers.
         """
-        if not table or len(table) < 2:
-            return ExtractionResult(
-                success=False,
-                poms=[],
-                matched_columns={},
-                confidence_scores={},
-                error="Table too small (needs header + at least 1 data row)"
-            )
+        try:
+            if not table or len(table) < 2:
+                return ExtractionResult(
+                    success=False,
+                    poms=[],
+                    matched_columns={},
+                    confidence_scores={},
+                    error="Table too small (needs header + at least 1 data row)"
+                )
         
-        # Find header row - scan first few rows to find one with Description/POM column
-        header_row = None
-        data_start_idx = 0
-        
-        # Try to find a row that contains a column matching our 'name' patterns
-        for idx, row in enumerate(table[:min(5, len(table))]):  # Check first 5 rows
-            if not any(cell and str(cell).strip() for cell in row):
-                continue
+            # Find header row - scan first few rows to find one with Description/POM column
+            header_row = None
+            data_start_idx = 0
             
-            potential_header = [str(cell).strip() if cell else '' for cell in row]
-            print(f"[Extractor] Checking row {idx} as potential header: {potential_header[:6]}...")
-            
-            # Try to match columns
-            test_mapping, test_scores = self._match_columns(potential_header)
-            
-            # If we found a 'name' column, use this row as header
-            if 'name' in test_mapping:
-                header_row = potential_header
-                data_start_idx = idx + 1
-                print(f"[Extractor] Found header row at index {idx}, matched 'name' to column {test_mapping['name']}")
-                break
-        
-        # Fallback to first non-empty row if no match found
-        if not header_row:
-            for idx, row in enumerate(table):
-                if any(cell and str(cell).strip() for cell in row):
-                    header_row = [str(cell).strip() if cell else '' for cell in row]
+            # Try to find a row that contains a column matching our 'name' patterns
+            for idx, row in enumerate(table[:min(5, len(table))]):  # Check first 5 rows
+                if not any(cell and str(cell).strip() for cell in row):
+                    continue
+                
+                potential_header = [str(cell).strip() if cell else '' for cell in row]
+                print(f"[Extractor] Checking row {idx} as potential header: {potential_header[:6]}...")
+                
+                # Try to match columns
+                test_mapping, test_scores = self._match_columns(potential_header)
+                
+                # If we found a 'name' column, use this row as header
+                if 'name' in test_mapping:
+                    header_row = potential_header
                     data_start_idx = idx + 1
-                    print(f"[Extractor] Using fallback: first non-empty row at index {idx}")
+                    print(f"[Extractor] Found header row at index {idx}, matched 'name' to column {test_mapping['name']}")
                     break
-        
-        if not header_row:
-            return ExtractionResult(
-                success=False,
-                poms=[],
-                matched_columns={},
-                confidence_scores={},
-                error="Could not find header row in table"
-            )
-        
-        # Match columns using fuzzy matching
-        column_mapping, confidence_scores = self._match_columns(header_row)
-        print(f"[Extractor] Column mapping result: {column_mapping}")
-        print(f"[Extractor] Confidence scores: {confidence_scores}")
-        
-        # We need at least the name column
-        if 'name' not in column_mapping:
-            # Show all non-empty columns for debugging
-            non_empty_cols = [col for col in header_row if col]
-            return ExtractionResult(
-                success=False,
-                poms=[],
-                matched_columns={},
-                confidence_scores={},
-                error=f"Could not find a Description/POM name column. Available columns: {', '.join(non_empty_cols)}"
-            )
-        
-        matched_columns = {
-            field: header_row[col_idx] 
-            for field, col_idx in column_mapping.items()
-        }
-        
-        # Extract data rows
-        poms = []
-        for row_idx, row in enumerate(table[data_start_idx:]):
-            if not row or not any(str(cell).strip() if cell else '' for cell in row):
-                continue  # Skip empty rows
             
-            # Pad row if needed
-            while len(row) < len(header_row):
-                row.append('')
+            # Fallback to first non-empty row if no match found
+            if not header_row:
+                for idx, row in enumerate(table):
+                    if any(cell and str(cell).strip() for cell in row):
+                        header_row = [str(cell).strip() if cell else '' for cell in row]
+                        data_start_idx = idx + 1
+                        print(f"[Extractor] Using fallback: first non-empty row at index {idx}")
+                        break
             
-            name_idx = column_mapping['name']
-            raw_name = str(row[name_idx]).strip() if name_idx < len(row) and row[name_idx] else ''
+            if not header_row:
+                return ExtractionResult(
+                    success=False,
+                    poms=[],
+                    matched_columns={},
+                    confidence_scores={},
+                    error="Could not find header row in table"
+                )
             
-            if not raw_name:
-                continue  # Skip rows without a name
+            # Match columns using fuzzy matching
+            column_mapping, confidence_scores = self._match_columns(header_row)
+            print(f"[Extractor] Column mapping result: {column_mapping}")
+            print(f"[Extractor] Confidence scores: {confidence_scores}")
             
-            # Check if name contains newlines (might be merged cells)
-            names = [n.strip() for n in raw_name.split('\n') if n.strip()]
+            # We need at least the name column
+            if 'name' not in column_mapping:
+                # Show all non-empty columns for debugging
+                non_empty_cols = [col for col in header_row if col]
+                return ExtractionResult(
+                    success=False,
+                    poms=[],
+                    matched_columns={},
+                    confidence_scores={},
+                    error=f"Could not find a Description/POM name column. Available columns: {', '.join(non_empty_cols)}"
+                )
             
-            # Get tolerance column value
-            tol_idx = column_mapping.get('default_tol')
-            raw_tol = ''
-            if tol_idx is not None and tol_idx < len(row) and row[tol_idx]:
-                raw_tol = str(row[tol_idx]).strip()
+            matched_columns = {
+                field: header_row[col_idx] 
+                for field, col_idx in column_mapping.items()
+            }
             
-            # Check if tolerance also has newlines (parallel lists)
-            tol_values = [t.strip() for t in raw_tol.split('\n') if t.strip()] if raw_tol else []
-            
-            print(f"[Extractor] Row {row_idx}: names={len(names)}, tols={len(tol_values)}")
-            
-            # If we have multiple names with matching tolerances, create separate POMs
-            if len(names) > 1:
-                for i, name in enumerate(names):
+            # Extract data rows
+            poms = []
+            for row_idx, row in enumerate(table[data_start_idx:]):
+                if not row or not any(str(cell).strip() if cell else '' for cell in row):
+                    continue  # Skip empty rows
+                
+                # Pad row if needed
+                while len(row) < len(header_row):
+                    row.append('')
+                
+                name_idx = column_mapping['name']
+                raw_name = str(row[name_idx]).strip() if name_idx < len(row) and row[name_idx] else ''
+                
+                if not raw_name:
+                    continue  # Skip rows without a name
+                
+                # Check if name contains newlines (might be merged cells)
+                names = [n.strip() for n in raw_name.split('\\n') if n.strip()]
+                
+                # Get tolerance column value
+                tol_idx = column_mapping.get('default_tol')
+                raw_tol = ''
+                if tol_idx is not None and tol_idx < len(row) and row[tol_idx]:
+                    raw_tol = str(row[tol_idx]).strip()
+                
+                # Check if tolerance also has newlines (parallel lists)
+                tol_values = [t.strip() for t in raw_tol.split('\\n') if t.strip()] if raw_tol else []
+                
+                print(f"[Extractor] Row {row_idx}: names={len(names)}, tols={len(tol_values)}")
+                
+                # If we have multiple names with matching tolerances, create separate POMs
+                if len(names) > 1:
+                    for i, name in enumerate(names):
+                        default_tol = 0.0
+                        if i < len(tol_values):
+                            default_tol = abs(self._parse_number(tol_values[i]))
+                        elif len(tol_values) == 1:
+                            default_tol = abs(self._parse_number(tol_values[0]))
+                        
+                        poms.append(ExtractedPOM(
+                            name=name,
+                            default_tol=default_tol,
+                            default_std=None
+                        ))
+                else:
+                    # Single name - normal processing
+                    name = names[0] if names else raw_name
+                    
+                    # Extract tolerance (always use absolute value)
                     default_tol = 0.0
-                    if i < len(tol_values):
-                        default_tol = abs(self._parse_number(tol_values[i]))
-                    elif len(tol_values) == 1:
+                    if tol_values:
                         default_tol = abs(self._parse_number(tol_values[0]))
+                    elif raw_tol:
+                        default_tol = abs(self._parse_number(raw_tol))
+                    
+                    # Extract standard (optional)
+                    default_std = None
+                    if 'default_std' in column_mapping:
+                        std_idx = column_mapping['default_std']
+                        if std_idx < len(row) and row[std_idx]:
+                            std_value = self._parse_number(str(row[std_idx]))
+                            if std_value != 0.0:
+                                default_std = std_value
                     
                     poms.append(ExtractedPOM(
                         name=name,
                         default_tol=default_tol,
-                        default_std=None
+                        default_std=default_std
                     ))
-            else:
-                # Single name - normal processing
-                name = names[0] if names else raw_name
-                
-                # Extract tolerance (always use absolute value)
-                default_tol = 0.0
-                if tol_values:
-                    default_tol = abs(self._parse_number(tol_values[0]))
-                elif raw_tol:
-                    default_tol = abs(self._parse_number(raw_tol))
-                
-                # Extract standard (optional)
-                default_std = None
-                if 'default_std' in column_mapping:
-                    std_idx = column_mapping['default_std']
-                    if std_idx < len(row) and row[std_idx]:
-                        std_value = self._parse_number(str(row[std_idx]))
-                        if std_value != 0.0:
-                            default_std = std_value
-                
-                poms.append(ExtractedPOM(
-                    name=name,
-                    default_tol=default_tol,
-                    default_std=default_std
-                ))
-        
-        if not poms:
+            
+            if not poms:
+                return ExtractionResult(
+                    success=False,
+                    poms=[],
+                    matched_columns=matched_columns,
+                    confidence_scores=confidence_scores,
+                    error="No valid POM data found in table rows"
+                )
+            
+            return ExtractionResult(
+                success=True,
+                poms=poms,
+                matched_columns=matched_columns,
+                confidence_scores=confidence_scores
+            )
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"[Extractor] Exception in _process_table:\n{error_trace}")
             return ExtractionResult(
                 success=False,
                 poms=[],
-                matched_columns=matched_columns,
-                confidence_scores=confidence_scores,
-                error="No valid POM data found in table rows"
+                matched_columns={},
+                confidence_scores={},
+                error=f"Error processing table: {str(e)}"
             )
-        
-        return ExtractionResult(
-            success=True,
-            poms=poms,
-            matched_columns=matched_columns,
-            confidence_scores=confidence_scores
-        )
     
     def _match_columns(self, headers: List[str]) -> Tuple[Dict[str, int], Dict[str, int]]:
         """
