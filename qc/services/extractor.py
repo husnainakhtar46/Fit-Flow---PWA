@@ -42,7 +42,7 @@ COLUMN_PATTERNS = {
     'default_tol': [
         'tolerance', 'tol', '+/-', 'plus minus', 'plus/minus', 'tol (+/-)',
         'tolerance (+/-)', '+/- tol', 'allowance', 'variation', 'dev',
-        'deviation', 'acceptable deviation'
+        'deviation', 'acceptable deviation', 'tol (-)', 'tol (+)', 'tol-', 'tol+'
     ],
     'default_std': [
         'standard', 'std', 'spec', 'specification', 'target', 'nominal',
@@ -248,12 +248,12 @@ class POMExtractor:
             if not name:
                 continue  # Skip rows without a name
             
-            # Extract tolerance
+            # Extract tolerance (always use absolute value)
             default_tol = 0.0
             if 'default_tol' in column_mapping:
                 tol_idx = column_mapping['default_tol']
                 if tol_idx < len(row) and row[tol_idx]:
-                    default_tol = self._parse_number(str(row[tol_idx]))
+                    default_tol = abs(self._parse_number(str(row[tol_idx])))
             
             # Extract standard (optional)
             default_std = None
