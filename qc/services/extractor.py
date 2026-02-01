@@ -33,11 +33,12 @@ class ExtractionResult:
 
 
 # Column name variations for fuzzy matching
+# Note: 'name' matches the Description column, 'default_tol' matches Tolerance column
 COLUMN_PATTERNS = {
     'name': [
-        'description', 'desc', 'pom', 'pom name', 'point of measure',
-        'measurement', 'measurement point', 'item', 'details', 'name',
-        'specification', 'spec name', 'measure point', 'how to measure'
+        'description', 'desc', 'details', 'name', 'item',
+        'measurement', 'measurement point', 'measure point',
+        'specification', 'spec name', 'how to measure'
     ],
     'default_tol': [
         'tolerance', 'tol', '+/-', 'plus minus', 'plus/minus', 'tol (+/-)',
