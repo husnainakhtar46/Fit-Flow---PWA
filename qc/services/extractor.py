@@ -93,18 +93,40 @@ class POMExtractor:
                 all_tables = []
                 print(f"[Extractor] PDF has {len(pdf.pages)} pages")
                 
+                # Table extraction settings - try multiple strategies
+                table_settings = [
+                    {},  # Default settings
+                    {"vertical_strategy": "lines", "horizontal_strategy": "lines"},
+                    {"vertical_strategy": "text", "horizontal_strategy": "text"},
+                    {"snap_tolerance": 5, "join_tolerance": 5},
+                ]
+                
                 # Extract tables from all pages
                 for page_idx, page in enumerate(pdf.pages):
                     print(f"[Extractor] Processing page {page_idx + 1}")
-                    tables = page.extract_tables()
-                    print(f"[Extractor] Page {page_idx + 1} has {len(tables) if tables else 0} tables")
-                    for table in tables:
-                        if table and len(table) > 1:  # At least header + 1 row
-                            print(f"[Extractor] Found table with {len(table)} rows")
-                            # Print first row (headers) for debugging
-                            if table[0]:
-                                print(f"[Extractor] Table headers: {table[0][:5]}...")  # First 5 columns
-                            all_tables.append(table)
+                    
+                    # Try different extraction strategies
+                    for strategy_idx, settings in enumerate(table_settings):
+                        try:
+                            tables = page.extract_tables(table_settings=settings)
+                            if tables:
+                                print(f"[Extractor] Page {page_idx + 1}, strategy {strategy_idx}: found {len(tables)} tables")
+                                for table in tables:
+                                    if table and len(table) > 1:  # At least header + 1 row
+                                        print(f"[Extractor] Found table with {len(table)} rows")
+                                        # Print first few rows for debugging
+                                        if table[0]:
+                                            print(f"[Extractor] Table row 0: {table[0][:5]}...")
+                                        if len(table) > 1 and table[1]:
+                                            print(f"[Extractor] Table row 1: {table[1][:5]}...")
+                                        if len(table) > 2 and table[2]:
+                                            print(f"[Extractor] Table row 2: {table[2][:5]}...")
+                                        all_tables.append(table)
+                                if all_tables:
+                                    break  # Use first successful strategy
+                        except Exception as e:
+                            print(f"[Extractor] Strategy {strategy_idx} failed: {e}")
+                            continue
                 
                 if not all_tables:
                     print("[Extractor] No tables found in PDF")
@@ -259,7 +281,7 @@ class POMExtractor:
         
         # Extract data rows
         poms = []
-        for row in table[data_start_idx:]:
+        for row_idx, row in enumerate(table[data_start_idx:]):
             if not row or not any(str(cell).strip() if cell else '' for cell in row):
                 continue  # Skip empty rows
             
@@ -268,32 +290,64 @@ class POMExtractor:
                 row.append('')
             
             name_idx = column_mapping['name']
-            name = str(row[name_idx]).strip() if name_idx < len(row) and row[name_idx] else ''
+            raw_name = str(row[name_idx]).strip() if name_idx < len(row) and row[name_idx] else ''
             
-            if not name:
+            if not raw_name:
                 continue  # Skip rows without a name
             
-            # Extract tolerance (always use absolute value)
-            default_tol = 0.0
-            if 'default_tol' in column_mapping:
-                tol_idx = column_mapping['default_tol']
-                if tol_idx < len(row) and row[tol_idx]:
-                    default_tol = abs(self._parse_number(str(row[tol_idx])))
+            # Check if name contains newlines (might be merged cells)
+            names = [n.strip() for n in raw_name.split('\n') if n.strip()]
             
-            # Extract standard (optional)
-            default_std = None
-            if 'default_std' in column_mapping:
-                std_idx = column_mapping['default_std']
-                if std_idx < len(row) and row[std_idx]:
-                    std_value = self._parse_number(str(row[std_idx]))
-                    if std_value != 0.0:
-                        default_std = std_value
+            # Get tolerance column value
+            tol_idx = column_mapping.get('default_tol')
+            raw_tol = ''
+            if tol_idx is not None and tol_idx < len(row) and row[tol_idx]:
+                raw_tol = str(row[tol_idx]).strip()
             
-            poms.append(ExtractedPOM(
-                name=name,
-                default_tol=default_tol,
-                default_std=default_std
-            ))
+            # Check if tolerance also has newlines (parallel lists)
+            tol_values = [t.strip() for t in raw_tol.split('\n') if t.strip()] if raw_tol else []
+            
+            print(f"[Extractor] Row {row_idx}: names={len(names)}, tols={len(tol_values)}")
+            
+            # If we have multiple names with matching tolerances, create separate POMs
+            if len(names) > 1:
+                for i, name in enumerate(names):
+                    default_tol = 0.0
+                    if i < len(tol_values):
+                        default_tol = abs(self._parse_number(tol_values[i]))
+                    elif len(tol_values) == 1:
+                        default_tol = abs(self._parse_number(tol_values[0]))
+                    
+                    poms.append(ExtractedPOM(
+                        name=name,
+                        default_tol=default_tol,
+                        default_std=None
+                    ))
+            else:
+                # Single name - normal processing
+                name = names[0] if names else raw_name
+                
+                # Extract tolerance (always use absolute value)
+                default_tol = 0.0
+                if tol_values:
+                    default_tol = abs(self._parse_number(tol_values[0]))
+                elif raw_tol:
+                    default_tol = abs(self._parse_number(raw_tol))
+                
+                # Extract standard (optional)
+                default_std = None
+                if 'default_std' in column_mapping:
+                    std_idx = column_mapping['default_std']
+                    if std_idx < len(row) and row[std_idx]:
+                        std_value = self._parse_number(str(row[std_idx]))
+                        if std_value != 0.0:
+                            default_std = std_value
+                
+                poms.append(ExtractedPOM(
+                    name=name,
+                    default_tol=default_tol,
+                    default_std=default_std
+                ))
         
         if not poms:
             return ExtractionResult(
