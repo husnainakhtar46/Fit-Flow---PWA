@@ -179,7 +179,9 @@ const Templates = () => {
                 toast.error(response.data.error || 'Failed to extract data from file');
             }
         } catch (error: any) {
-            const errorMessage = error.response?.data?.error || 'Failed to process file';
+            console.error('[ExtractPOM] Error:', error);
+            console.error('[ExtractPOM] Response:', error.response?.data);
+            const errorMessage = error.response?.data?.error || error.message || 'Failed to process file';
             toast.error(errorMessage);
         } finally {
             setIsExtracting(false);

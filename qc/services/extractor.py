@@ -86,19 +86,28 @@ class POMExtractor:
     def extract_from_pdf(self, file_content: bytes) -> ExtractionResult:
         """Extract POMs from a PDF file by finding tables"""
         try:
+            print(f"[Extractor] Starting PDF extraction, file size: {len(file_content)} bytes")
             pdf_file = io.BytesIO(file_content)
             
             with pdfplumber.open(pdf_file) as pdf:
                 all_tables = []
+                print(f"[Extractor] PDF has {len(pdf.pages)} pages")
                 
                 # Extract tables from all pages
-                for page in pdf.pages:
+                for page_idx, page in enumerate(pdf.pages):
+                    print(f"[Extractor] Processing page {page_idx + 1}")
                     tables = page.extract_tables()
+                    print(f"[Extractor] Page {page_idx + 1} has {len(tables) if tables else 0} tables")
                     for table in tables:
                         if table and len(table) > 1:  # At least header + 1 row
+                            print(f"[Extractor] Found table with {len(table)} rows")
+                            # Print first row (headers) for debugging
+                            if table[0]:
+                                print(f"[Extractor] Table headers: {table[0][:5]}...")  # First 5 columns
                             all_tables.append(table)
                 
                 if not all_tables:
+                    print("[Extractor] No tables found in PDF")
                     return ExtractionResult(
                         success=False,
                         poms=[],
@@ -107,17 +116,24 @@ class POMExtractor:
                         error="No tables found in PDF. Please ensure the PDF contains a measurement table."
                     )
                 
+                print(f"[Extractor] Total tables found: {len(all_tables)}")
+                
                 # Find the best table (one with matching columns)
                 for table in all_tables:
                     result = self._process_table(table)
                     if result.success:
+                        print(f"[Extractor] Successfully extracted {len(result.poms)} POMs")
                         return result
                 
                 # If no table matched, try the largest one
                 largest_table = max(all_tables, key=lambda t: len(t))
+                print(f"[Extractor] No direct match, trying largest table ({len(largest_table)} rows)")
                 return self._process_table(largest_table)
                 
         except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"[Extractor] Exception during PDF extraction:\n{error_trace}")
             return ExtractionResult(
                 success=False,
                 poms=[],

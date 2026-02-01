@@ -212,6 +212,7 @@ class ExtractPOMView(APIView):
     parser_classes = [MultiPartParser, FormParser]
     
     def post(self, request):
+        import traceback
         from .services.extractor import extract_pom_from_file
         
         file = request.FILES.get('file')
@@ -225,14 +226,27 @@ class ExtractPOMView(APIView):
         try:
             file_content = file.read()
             filename = file.name
+            print(f"[ExtractPOM] Received file: {filename}, size: {len(file_content)} bytes")
         except Exception as e:
+            print(f"[ExtractPOM] Error reading file: {str(e)}")
             return Response(
                 {'success': False, 'error': f'Error reading file: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         # Extract POMs
-        result = extract_pom_from_file(file_content, filename)
+        try:
+            result = extract_pom_from_file(file_content, filename)
+            print(f"[ExtractPOM] Extraction result: success={result.success}, poms={len(result.poms) if result.poms else 0}")
+        except Exception as e:
+            error_trace = traceback.format_exc()
+            print(f"[ExtractPOM] Exception during extraction:\n{error_trace}")
+            return Response({
+                'success': False,
+                'error': f'Extraction failed: {str(e)}',
+                'matched_columns': {},
+                'confidence_scores': {}
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         if result.success:
             return Response({
@@ -249,12 +263,14 @@ class ExtractPOMView(APIView):
                 'confidence_scores': result.confidence_scores
             })
         else:
+            print(f"[ExtractPOM] Extraction returned error: {result.error}")
             return Response({
                 'success': False,
                 'error': result.error,
                 'matched_columns': result.matched_columns,
                 'confidence_scores': result.confidence_scores
             }, status=status.HTTP_400_BAD_REQUEST)
+
 
 class FilterPresetViewSet(viewsets.ModelViewSet):
     """ViewSet for managing user filter presets"""
