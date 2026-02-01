@@ -195,15 +195,36 @@ class POMExtractor:
                 error="Table too small (needs header + at least 1 data row)"
             )
         
-        # Find header row (first row with text)
+        # Find header row - scan first few rows to find one with Description/POM column
         header_row = None
         data_start_idx = 0
         
-        for idx, row in enumerate(table):
-            if any(cell and str(cell).strip() for cell in row):
-                header_row = [str(cell).strip() if cell else '' for cell in row]
+        # Try to find a row that contains a column matching our 'name' patterns
+        for idx, row in enumerate(table[:min(5, len(table))]):  # Check first 5 rows
+            if not any(cell and str(cell).strip() for cell in row):
+                continue
+            
+            potential_header = [str(cell).strip() if cell else '' for cell in row]
+            print(f"[Extractor] Checking row {idx} as potential header: {potential_header[:6]}...")
+            
+            # Try to match columns
+            test_mapping, test_scores = self._match_columns(potential_header)
+            
+            # If we found a 'name' column, use this row as header
+            if 'name' in test_mapping:
+                header_row = potential_header
                 data_start_idx = idx + 1
+                print(f"[Extractor] Found header row at index {idx}, matched 'name' to column {test_mapping['name']}")
                 break
+        
+        # Fallback to first non-empty row if no match found
+        if not header_row:
+            for idx, row in enumerate(table):
+                if any(cell and str(cell).strip() for cell in row):
+                    header_row = [str(cell).strip() if cell else '' for cell in row]
+                    data_start_idx = idx + 1
+                    print(f"[Extractor] Using fallback: first non-empty row at index {idx}")
+                    break
         
         if not header_row:
             return ExtractionResult(
@@ -216,15 +237,19 @@ class POMExtractor:
         
         # Match columns using fuzzy matching
         column_mapping, confidence_scores = self._match_columns(header_row)
+        print(f"[Extractor] Column mapping result: {column_mapping}")
+        print(f"[Extractor] Confidence scores: {confidence_scores}")
         
         # We need at least the name column
         if 'name' not in column_mapping:
+            # Show all non-empty columns for debugging
+            non_empty_cols = [col for col in header_row if col]
             return ExtractionResult(
                 success=False,
                 poms=[],
                 matched_columns={},
                 confidence_scores={},
-                error="Could not find a Description/POM name column. Available columns: " + ", ".join(header_row)
+                error=f"Could not find a Description/POM name column. Available columns: {', '.join(non_empty_cols)}"
             )
         
         matched_columns = {
