@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../lib/api';
 import Pagination from '../components/Pagination';
@@ -45,7 +45,13 @@ interface PaginatedResponse<T> {
 const Customers = () => {
     const queryClient = useQueryClient();
     const [isOpen, setIsOpen] = useState(false);
+    const [editingCustomer, setEditingCustomer] = useState<any | null>(null);
     const [page, setPage] = useState(1);
+
+    // Permissions
+    const userType = localStorage.getItem('user_type');
+    const isSuperUser = localStorage.getItem('is_superuser') === 'true';
+    const canEdit = isSuperUser || userType === 'quality_head';
 
     const { register, control, handleSubmit, reset, formState: { errors } } = useForm<CustomerForm>({
         defaultValues: {
@@ -118,24 +124,73 @@ const Customers = () => {
         },
     });
 
+    const updateMutation = useMutation({
+        mutationFn: async (data: CustomerForm & { id: string }) => {
+            const { id, ...updateData } = data;
+            // Validate at least one "To" email
+            const hasToEmail = updateData.emails.some(e => e.email_type === 'to' && e.email.trim() !== '');
+            if (!hasToEmail) {
+                throw new Error('At least one "To" email is required');
+            }
+            // Send everything to PATCH, backend handles sync
+            const res = await api.patch(`/customers/${id}/`, updateData);
+            return res.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['customers'] });
+            setIsOpen(false);
+            setEditingCustomer(null);
+            reset({ name: '', emails: [{ contact_name: '', email: '', email_type: 'to' }] });
+            toast.success('Customer updated');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'Failed to update customer');
+        }
+    });
+
+    const handleEdit = (customer: any) => {
+        setEditingCustomer(customer);
+        reset({
+            name: customer.name,
+            emails: customer.emails.length > 0 ? customer.emails : [{ contact_name: '', email: '', email_type: 'to' }]
+        });
+        setIsOpen(true);
+    };
+
+    const handleClose = (open: boolean) => {
+        setIsOpen(open);
+        if (!open) {
+            setEditingCustomer(null);
+            reset({ name: '', emails: [{ contact_name: '', email: '', email_type: 'to' }] });
+        }
+    };
+
     if (isLoading) return <div>Loading...</div>;
 
     return (
         <div className="space-y-4 md:space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Customers</h1>
-                <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                    <DialogTrigger asChild>
-                        <Button>
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Customer
-                        </Button>
-                    </DialogTrigger>
+                <Dialog open={isOpen} onOpenChange={handleClose}>
+                    {canEdit && (
+                        <DialogTrigger asChild>
+                            <Button onClick={() => setEditingCustomer(null)}>
+                                <Plus className="w-4 h-4 mr-2" />
+                                Add Customer
+                            </Button>
+                        </DialogTrigger>
+                    )}
                     <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
-                            <DialogTitle>Add New Customer</DialogTitle>
+                            <DialogTitle>{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</DialogTitle>
                         </DialogHeader>
-                        <form onSubmit={handleSubmit((data) => createMutation.mutate(data))} className="space-y-6 py-4">
+                        <form onSubmit={handleSubmit((data) => {
+                            if (editingCustomer) {
+                                updateMutation.mutate({ ...data, id: editingCustomer.id });
+                            } else {
+                                createMutation.mutate(data);
+                            }
+                        })} className="space-y-6 py-4">
                             <div className="space-y-2">
                                 <Label>Customer Name</Label>
                                 <Input {...register("name", { required: true })} placeholder="Enter customer name" />
@@ -238,9 +293,11 @@ const Customers = () => {
                             <Button
                                 type="submit"
                                 className="w-full"
-                                disabled={createMutation.isPending}
+                                disabled={createMutation.isPending || updateMutation.isPending}
                             >
-                                {createMutation.isPending ? 'Creating...' : 'Create Customer'}
+                                {createMutation.isPending || updateMutation.isPending
+                                    ? 'Saving...'
+                                    : (editingCustomer ? 'Update Customer' : 'Create Customer')}
                             </Button>
                         </form>
                     </DialogContent>
@@ -277,18 +334,31 @@ const Customers = () => {
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="text-red-500 hover:text-red-700"
-                                        onClick={() => {
-                                            if (confirm('Are you sure?')) {
-                                                deleteMutation.mutate(customer.id);
-                                            }
-                                        }}
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        {canEdit && (
+                                            <>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleEdit(customer)}
+                                                >
+                                                    <Edit2 className="w-4 h-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="text-red-500 hover:text-red-700"
+                                                    onClick={() => {
+                                                        if (confirm('Are you sure?')) {
+                                                            deleteMutation.mutate(customer.id);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}

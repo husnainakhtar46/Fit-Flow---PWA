@@ -88,6 +88,7 @@ const StyleCycle = () => {
     const [search, setSearch] = useState('');
     const [selectedStyle, setSelectedStyle] = useState<StyleMaster | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
+    const [isEditOpen, setIsEditOpen] = useState(false); // New state for edit dialog
     const [activeTab, setActiveTab] = useState('Fit Sample');
     const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
     const [newLink, setNewLink] = useState({ label: '', url: '' });
@@ -96,7 +97,8 @@ const StyleCycle = () => {
 
     // Check user role
     const userType = localStorage.getItem('user_type');
-    const isQA = userType === 'qa';
+    const isSuperUser = localStorage.getItem('is_superuser') === 'true';
+    const canEdit = userType !== 'qa' || isSuperUser;
 
     // Form state for new style
     const [newStyle, setNewStyle] = useState({
@@ -138,6 +140,24 @@ const StyleCycle = () => {
             return res.data;
         },
         enabled: !!selectedStyle?.id,
+    });
+
+    // Update style mutation
+    const updateStyleMutation = useMutation({
+        mutationFn: async (data: typeof newStyle & { id: string }) => {
+            const { id, ...updateData } = data;
+            return api.patch(`/styles/${id}/`, updateData);
+        },
+        onSuccess: (res) => {
+            queryClient.invalidateQueries({ queryKey: ['styles'] });
+            queryClient.invalidateQueries({ queryKey: ['style', res.data.id] });
+            setSelectedStyle(res.data);
+            setIsEditOpen(false);
+            toast.success('Style updated successfully');
+        },
+        onError: () => {
+            toast.error('Failed to update style');
+        },
     });
 
     // Create style mutation
@@ -305,7 +325,7 @@ const StyleCycle = () => {
             <div className="space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <h1 className="text-3xl font-bold text-gray-900">Style Cycle</h1>
-                    {!isQA && (
+                    {canEdit && (
                         <Button onClick={() => setIsCreateOpen(true)}>
                             <Plus className="w-4 h-4 mr-2" />
                             New Style
@@ -471,9 +491,29 @@ const StyleCycle = () => {
                     Back
                 </Button>
                 <div className="flex-1">
-                    <h1 className="text-2xl font-bold text-gray-900">
-                        Style: {styleDetails?.po_number || selectedStyle.po_number} - {styleDetails?.style_name || selectedStyle.style_name}
-                    </h1>
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-2xl font-bold text-gray-900">
+                            Style: {styleDetails?.po_number || selectedStyle.po_number} - {styleDetails?.style_name || selectedStyle.style_name}
+                        </h1>
+                        {canEdit && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    setNewStyle({
+                                        po_number: styleDetails?.po_number || selectedStyle.po_number,
+                                        style_name: styleDetails?.style_name || selectedStyle.style_name,
+                                        color: styleDetails?.color || selectedStyle.color,
+                                        season: styleDetails?.season || selectedStyle.season,
+                                        customer: styleDetails?.customer || selectedStyle.customer,
+                                    });
+                                    setIsEditOpen(true);
+                                }}
+                            >
+                                <Edit2 className="w-4 h-4 text-gray-500 hover:text-gray-900" />
+                            </Button>
+                        )}
+                    </div>
                     <p className="text-gray-500">
                         {styleDetails?.color && `${styleDetails.color} • `}
                         {styleDetails?.season && `${styleDetails.season} • `}
@@ -483,8 +523,8 @@ const StyleCycle = () => {
                 <Button
                     variant="destructive"
                     size="sm"
-                    disabled={isQA}
-                    className={isQA ? 'hidden' : ''}
+                    disabled={!canEdit}
+                    className={!canEdit ? 'hidden' : ''}
                     onClick={() => {
                         if (confirm('Are you sure you want to delete this style?')) {
                             deleteStyleMutation.mutate(selectedStyle.id);
@@ -530,7 +570,7 @@ const StyleCycle = () => {
                         <h2 className="text-lg font-semibold">
                             Sample Feedback ({activeTab})
                         </h2>
-                        {!isQA && !editingComment && usedSampleNumbers.length < 5 && (
+                        {canEdit && !editingComment && usedSampleNumbers.length < 5 && (
                             <Button size="sm" onClick={handleCreateComment}>
                                 <Plus className="w-4 h-4 mr-1" /> Add New Sample Comment
                             </Button>
@@ -674,7 +714,7 @@ const StyleCycle = () => {
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                {!isQA && (
+                                                {canEdit && (
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
@@ -758,7 +798,7 @@ const StyleCycle = () => {
                                                         )
                                                     ))}
                                                 </div>
-                                                {!isQA && (
+                                                {canEdit && (
                                                     <div className="flex justify-end pt-2 border-t">
                                                         <Button
                                                             variant="destructive"
@@ -792,7 +832,7 @@ const StyleCycle = () => {
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="text-lg font-semibold">Related Links & Documents</h2>
-                        {!isQA && (
+                        {canEdit && (
                             <Button size="sm" onClick={() => setIsLinkDialogOpen(true)}>
                                 <Plus className="w-4 h-4 mr-1" />
                                 Add Link
@@ -819,7 +859,7 @@ const StyleCycle = () => {
                                         >
                                             <ExternalLink className="w-4 h-4" />
                                         </Button>
-                                        {!isQA && (
+                                        {canEdit && (
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -887,6 +927,80 @@ const StyleCycle = () => {
                             disabled={!newLink.label || !newLink.url}
                         >
                             Add Link
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+            {/* Edit Style Dialog */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Edit Style Details</DialogTitle>
+                        <DialogDescription>
+                            Update the style information.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {selectedStyle && (
+                        <div className="space-y-4 py-4">
+                            <div>
+                                <Label>PO Number *</Label>
+                                <Input
+                                    value={newStyle.po_number}
+                                    onChange={(e) => setNewStyle({ ...newStyle, po_number: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label>Style Name *</Label>
+                                <Input
+                                    value={newStyle.style_name}
+                                    onChange={(e) => setNewStyle({ ...newStyle, style_name: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label>Color/Wash</Label>
+                                    <Input
+                                        value={newStyle.color}
+                                        onChange={(e) => setNewStyle({ ...newStyle, color: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <Label>Season</Label>
+                                    <Input
+                                        value={newStyle.season}
+                                        onChange={(e) => setNewStyle({ ...newStyle, season: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <Label>Customer</Label>
+                                <Select
+                                    value={newStyle.customer}
+                                    onValueChange={(v) => setNewStyle({ ...newStyle, customer: v })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select customer" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {customers.map((c: { id: string; name: string }) => (
+                                            <SelectItem key={c.id} value={c.id}>
+                                                {c.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    )}
+                    <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => selectedStyle && updateStyleMutation.mutate({ ...newStyle, id: selectedStyle.id })}
+                            disabled={!newStyle.po_number || !newStyle.style_name}
+                        >
+                            Save Changes
                         </Button>
                     </div>
                 </DialogContent>

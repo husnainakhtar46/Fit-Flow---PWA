@@ -27,10 +27,32 @@ class CustomerEmailSerializer(serializers.ModelSerializer):
         fields = ["id", "contact_name", "email", "email_type"]
 
 class CustomerSerializer(serializers.ModelSerializer):
-    emails = CustomerEmailSerializer(many=True, read_only=True)
+    emails = CustomerEmailSerializer(many=True, required=False)
     class Meta:
         model = Customer
         fields = ["id", "name", "created_at", "emails"]
+
+    def create(self, validated_data):
+        emails_data = validated_data.pop("emails", [])
+        customer = Customer.objects.create(**validated_data)
+        for email_data in emails_data:
+            CustomerEmail.objects.create(customer=customer, **email_data)
+        return customer
+
+    def update(self, instance, validated_data):
+        emails_data = validated_data.pop("emails", None)
+        
+        # Update main fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update emails if provided
+        if emails_data is not None:
+            instance.emails.all().delete()
+            for email_data in emails_data:
+                CustomerEmail.objects.create(customer=instance, **email_data)
+        return instance
 
 class TemplatePOMSerializer(serializers.ModelSerializer):
     class Meta:
