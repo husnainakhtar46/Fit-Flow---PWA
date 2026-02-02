@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Check, ChevronsUpDown, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -98,7 +98,7 @@ export function SearchableSelect({
                                 <div
                                     key={option.value}
                                     className={cn(
-                                        "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground cursor-pointer hover:bg-gray-100",
+                                        "relative flex select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground cursor-pointer hover:bg-gray-100",
                                         value === option.value ? "bg-gray-100 font-medium" : ""
                                     )}
                                     onClick={() => handleSelect(option.value)}

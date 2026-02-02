@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 
-import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Layers, ArrowUpDown } from 'lucide-react';
+import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Layers } from 'lucide-react';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { toast } from 'sonner';
 import axios from 'axios';
