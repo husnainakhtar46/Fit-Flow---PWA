@@ -278,6 +278,12 @@ export default function FinalInspections() {
       {/* Form Dialog */}
       <Dialog open={isFormOpen} onOpenChange={handleCloseAttempt}>
         <DialogContent className="max-w-full w-screen h-screen overflow-y-auto rounded-none p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Final Inspection Form</DialogTitle>
+            <DialogDescription>
+              Create or edit a final inspection report. Fill out all required fields and submit.
+            </DialogDescription>
+          </DialogHeader>
           <FinalInspectionForm
             inspectionId={selectedInspection || undefined}
             onClose={() => {

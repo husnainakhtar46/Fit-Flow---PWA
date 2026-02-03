@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 
-import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Layers } from 'lucide-react';
+import { FileText, Mail, Trash2, Loader2, ChevronLeft, ChevronRight, Plus, Layers } from 'lucide-react';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { InlineSuggestionDropdown } from '../components/InlineSuggestionDropdown';
 import { useStyleLookup } from '../hooks/useStyleLookup';
@@ -107,9 +107,7 @@ const EvaluationForm = () => {
         ordering: '-created_at',
     });
 
-    const [modalSearchTerm, setModalSearchTerm] = useState('');
-    const [debouncedModalSearchTerm, setDebouncedModalSearchTerm] = useState('');
-    const [showSearchResults, setShowSearchResults] = useState(false);
+
 
     // Fetch Factories
     const { data: factoriesData } = useQuery({
@@ -345,10 +343,7 @@ const EvaluationForm = () => {
         return () => clearTimeout(timer);
     }, [listSearch]);
 
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedModalSearchTerm(modalSearchTerm), 500);
-        return () => clearTimeout(timer);
-    }, [modalSearchTerm]);
+
 
     // Watch PO number to filter Style/Color suggestions
     const poValue = watch('po_number');
@@ -434,88 +429,7 @@ const EvaluationForm = () => {
     const customers = Array.isArray(customersData) ? customersData : [];
     const templates = Array.isArray(templatesData) ? templatesData : [];
 
-    const { data: modalSearchResults, isLoading: isSearchingModal } = useQuery({
-        queryKey: ['inspectionSearch', debouncedModalSearchTerm],
-        queryFn: async () => {
-            if (!debouncedModalSearchTerm) return [];
-            const res = await api.get(`/inspections/?search=${debouncedModalSearchTerm}`);
-            return res.data.results || res.data;
-        },
-        enabled: debouncedModalSearchTerm.length > 0,
-    });
 
-    // Load Data Handler
-    const handleLoadInspection = async (id: string) => {
-        try {
-            toast.info("Loading previous data...");
-            const { data } = await api.get(`/inspections/${id}/`);
-
-            setIsManualTemplateChange(false);
-            setSelectedTemplate(data.template);
-
-            reset({
-                style: data.style || '',
-                color: data.color || '',
-                po_number: data.po_number || '',
-                stage: data.stage || 'Proto',
-                customer: data.customer || '',
-                template: data.template || '',
-
-                // Customer Comments by Category
-                customer_remarks: data.customer_remarks || '',
-                customer_fit_comments: data.customer_fit_comments || '',
-                customer_workmanship_comments: data.customer_workmanship_comments || '',
-                customer_wash_comments: data.customer_wash_comments || '',
-                customer_fabric_comments: data.customer_fabric_comments || '',
-                customer_accessories_comments: data.customer_accessories_comments || '',
-                customer_comments_addressed: data.customer_comments_addressed || false,
-
-                // QA Comments
-                qa_fit_comments: data.qa_fit_comments || '',
-                qa_workmanship_comments: data.qa_workmanship_comments || '',
-                qa_wash_comments: data.qa_wash_comments || '',
-                qa_fabric_comments: data.qa_fabric_comments || '',
-                qa_accessories_comments: data.qa_accessories_comments || '',
-
-                // Fabric Checks
-                fabric_handfeel: data.fabric_handfeel || 'OK',
-                fabric_pilling: data.fabric_pilling || 'None',
-
-                // Accessories
-                accessories_data: data.accessories_data || [],
-
-                remarks: data.remarks || '',
-
-                decision: '',
-                measurements: (data.measurements || []).map((m: any) => ({
-                    pom_name: m.pom_name,
-                    tol: m.tol,
-                    std: m.std ?? '',
-                    samples: (m.samples || []).map((s: any) => ({
-                        index: s.index,
-                        value: s.value ?? ''
-                    }))
-                }))
-            });
-
-            // Set sample count based on loaded data
-            const maxSampleIndex = Math.max(3, ...data.measurements?.flatMap((m: any) =>
-                (m.samples || []).map((s: any) => s.index)
-            ) || [3]);
-            setSampleCount(maxSampleIndex);
-
-            setImageSlots([
-                { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
-                { file: null, caption: '' }, { file: null, caption: '' },
-                { file: null, caption: '' }, { file: null, caption: '' },
-            ]);
-            setShowSearchResults(false);
-            setModalSearchTerm('');
-            toast.success("Loaded successfully!");
-        } catch (e) {
-            toast.error("Failed to load details");
-        }
-    };
 
     // Template Change
     useEffect(() => {
@@ -1044,40 +958,7 @@ const EvaluationForm = () => {
 
                             <div className="flex-1 overflow-y-auto">
                                 <div className="space-y-6 py-4 px-6 overflow-x-hidden pb-10">
-                                    {/* Search Bar */}
-                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                        <Label className="text-blue-700 mb-2 flex items-center gap-2">
-                                            <Copy className="w-4 h-4" /> Load previous evaluation data?
-                                        </Label>
-                                        <div className="relative">
-                                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                                            <Input
-                                                placeholder="Search by Style, PO or Customer..."
-                                                className="pl-8 bg-white"
-                                                value={modalSearchTerm}
-                                                onChange={(e) => { setModalSearchTerm(e.target.value); setShowSearchResults(true); }}
-                                            />
-                                            {isSearchingModal && <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-gray-400" />}
 
-                                            {showSearchResults && debouncedModalSearchTerm && (
-                                                <div className="absolute z-50 w-full bg-white border rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto">
-                                                    {modalSearchResults?.map((item: any) => (
-                                                        <div key={item.id} className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm" onClick={() => handleLoadInspection(item.id)}>
-                                                            <span className="font-bold">{item.style}</span>
-                                                            <span className="mx-2 text-gray-400">|</span>
-                                                            <span>{item.po_number}</span>
-                                                            <span className="mx-2 text-gray-400">|</span>
-                                                            <span>{item.color}</span>
-                                                            <span className="mx-2 text-gray-400">|</span>
-                                                            <span className="text-blue-600 font-medium">{item.stage}</span>
-                                                            <span className="mx-2 text-gray-400">|</span>
-                                                            <span className="text-gray-500">{new Date(item.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, '-')}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
 
                                     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
 

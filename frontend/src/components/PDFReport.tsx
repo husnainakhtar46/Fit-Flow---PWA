@@ -20,9 +20,9 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 12,
         fontWeight: 'bold',
-        backgroundColor: '#f0f0f0',
         padding: 5,
         marginBottom: 10,
+        textDecoration: 'underline',
     },
     table: {
         display: 'flex',
@@ -45,6 +45,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#e4e4e4',
         padding: 5,
         fontWeight: 'bold',
+        fontSize: 9,
     },
     tableCol: {
         width: '12.5%',
@@ -53,6 +54,7 @@ const styles = StyleSheet.create({
         borderLeftWidth: 0,
         borderTopWidth: 0,
         padding: 5,
+        fontSize: 9,
     },
     tableColWide: {
         width: '25%',
@@ -95,6 +97,14 @@ const styles = StyleSheet.create({
     },
     bold: {
         fontWeight: 'bold',
+    },
+    pass: {
+        color: 'green',
+        fontWeight: 'bold',
+    },
+    fail: {
+        color: 'red',
+        fontWeight: 'bold',
     }
 });
 
@@ -112,51 +122,79 @@ const PDFReport = ({ data, defects, images }: PDFReportProps) => {
         return Math.abs(numVal - spec) > tol;
     };
 
+    // Determine AQL labels based on standard (assuming 'standard' or 'strict')
+    const majorAQL = data.aql_standard === 'strict' ? '1.5' : '2.5';
+    const minorAQL = data.aql_standard === 'strict' ? '2.5' : '4.0';
+
     return (
         <Document>
             {/* Page 1: Summary */}
             <Page size="A4" style={styles.page}>
-                <Text style={styles.header}>Final Inspection Report</Text>
+                <Text style={styles.header}>FINAL INSPECTION REPORT</Text>
+
+                {/* Result Badge (approximated text) */}
+                <Text style={{ textAlign: 'right', fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>
+                    RESULT: <Text style={data.result === 'Pass' ? styles.pass : styles.fail}>{data.result?.toUpperCase() || 'PENDING'}</Text>
+                </Text>
 
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>1. General Information</Text>
-                    <View style={styles.summaryGrid}>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Customer:</Text> {data.customer_name || 'N/A'}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Date:</Text> {data.inspection_date}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>PO No:</Text> {data.order_no}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Style No:</Text> {data.style_no}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Color:</Text> {data.color}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Factory:</Text> {data.factory || 'N/A'}</Text></View>
-                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Result:</Text> {data.result || 'Pass'}</Text></View>
+                    <View style={styles.table}>
+                        <View style={styles.tableRow}>
+                            <View style={[styles.tableColHeader, { width: '16%' }]}><Text>Customer:</Text></View>
+                            <View style={[styles.tableCol, { width: '36%' }]}><Text>{data.customer_name || 'N/A'}</Text></View>
+                            <View style={[styles.tableColHeader, { width: '18%' }]}><Text>Inspection Date:</Text></View>
+                            <View style={[styles.tableCol, { width: '30%' }]}><Text>{data.inspection_date}</Text></View>
+                        </View>
+                        <View style={styles.tableRow}>
+                            <View style={[styles.tableColHeader, { width: '16%' }]}><Text>AQL Standard:</Text></View>
+                            <View style={[styles.tableCol, { width: '36%' }]}><Text>{data.aql_standard}</Text></View>
+                            <View style={[styles.tableColHeader, { width: '18%' }]}><Text>Order No:</Text></View>
+                            <View style={[styles.tableCol, { width: '30%' }]}><Text>{data.order_no}</Text></View>
+                        </View>
+                        <View style={styles.tableRow}>
+                            <View style={[styles.tableColHeader, { width: '16%' }]}><Text>Factory:</Text></View>
+                            <View style={[styles.tableCol, { width: '36%' }]}><Text>{data.factory || 'N/A'}</Text></View>
+                            <View style={[styles.tableColHeader, { width: '18%' }]}><Text>Style No:</Text></View>
+                            <View style={[styles.tableCol, { width: '30%' }]}><Text>{data.style_no}</Text></View>
+                        </View>
+                        <View style={styles.tableRow}>
+                            <View style={[styles.tableColHeader, { width: '16%' }]}><Text>Color:</Text></View>
+                            <View style={[styles.tableCol, { width: '36%' }]}><Text>{data.color}</Text></View>
+                            <View style={[styles.tableColHeader, { width: '18%' }]}><Text>Inspection Attempt:</Text></View>
+                            <View style={[styles.tableCol, { width: '30%' }]}><Text>{data.inspection_attempt}</Text></View>
+                        </View>
                     </View>
                 </View>
 
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>2. AQL Result Summary</Text>
                     <View style={styles.table}>
-                        <View style={styles.tableRow}>
-                            <View style={styles.tableColHeader}><Text>Defect Type</Text></View>
-                            <View style={styles.tableColHeader}><Text>Allowed</Text></View>
-                            <View style={styles.tableColHeader}><Text>Found</Text></View>
-                            <View style={styles.tableColHeader}><Text>Status</Text></View>
-                        </View>
-                        <View style={styles.tableRow}>
-                            <View style={styles.tableCol}><Text>Critical</Text></View>
-                            <View style={styles.tableCol}><Text>{data.max_allowed_critical || 0}</Text></View>
-                            <View style={styles.tableCol}><Text>{data.critical_found || 0}</Text></View>
-                            <View style={styles.tableCol}><Text>{(data.critical_found || 0) <= (data.max_allowed_critical || 0) ? 'Pass' : 'Fail'}</Text></View>
-                        </View>
-                        <View style={styles.tableRow}>
-                            <View style={styles.tableCol}><Text>Major</Text></View>
-                            <View style={styles.tableCol}><Text>{data.max_allowed_major || 0}</Text></View>
-                            <View style={styles.tableCol}><Text>{data.major_found || 0}</Text></View>
-                            <View style={styles.tableCol}><Text>{(data.major_found || 0) <= (data.max_allowed_major || 0) ? 'Pass' : 'Fail'}</Text></View>
-                        </View>
-                        <View style={styles.tableRow}>
-                            <View style={styles.tableCol}><Text>Minor</Text></View>
-                            <View style={styles.tableCol}><Text>{data.max_allowed_minor || 0}</Text></View>
-                            <View style={styles.tableCol}><Text>{data.minor_found || 0}</Text></View>
-                            <View style={styles.tableCol}><Text>{(data.minor_found || 0) <= (data.max_allowed_minor || 0) ? 'Pass' : 'Fail'}</Text></View>
+                        <View style={styles.table}>
+                            <View style={styles.tableRow}>
+                                <View style={[styles.tableColHeader, { width: '40%' }]}><Text>Defect Type</Text></View>
+                                <View style={[styles.tableColHeader, { width: '20%' }]}><Text>Allowed</Text></View>
+                                <View style={[styles.tableColHeader, { width: '20%' }]}><Text>Found</Text></View>
+                                <View style={[styles.tableColHeader, { width: '20%' }]}><Text>Status</Text></View>
+                            </View>
+                            <View style={styles.tableRow}>
+                                <View style={[styles.tableCol, { width: '40%' }]}><Text>Critical</Text></View>
+                                <View style={[styles.tableCol, { width: '20%' }]}><Text>{data.max_allowed_critical || 0}</Text></View>
+                                <View style={[styles.tableCol, { width: '20%' }]}><Text>{data.critical_found || 0}</Text></View>
+                                <View style={[styles.tableCol, { width: '20%' }]}><Text>{(data.critical_found || 0) <= (data.max_allowed_critical || 0) ? 'Pass' : 'Fail'}</Text></View>
+                            </View>
+                            <View style={styles.tableRow}>
+                                <View style={[styles.tableCol, { width: '40%' }]}><Text>Major</Text></View>
+                                <View style={[styles.tableCol, { width: '20%' }]}><Text>{data.max_allowed_major || 0}</Text></View>
+                                <View style={[styles.tableCol, { width: '20%' }]}><Text>{data.major_found || 0}</Text></View>
+                                <View style={[styles.tableCol, { width: '20%' }]}><Text>{(data.major_found || 0) <= (data.max_allowed_major || 0) ? 'Pass' : 'Fail'}</Text></View>
+                            </View>
+                            <View style={styles.tableRow}>
+                                <View style={[styles.tableCol, { width: '40%' }]}><Text>Minor</Text></View>
+                                <View style={[styles.tableCol, { width: '20%' }]}><Text>{data.max_allowed_minor || 0}</Text></View>
+                                <View style={[styles.tableCol, { width: '20%' }]}><Text>{data.minor_found || 0}</Text></View>
+                                <View style={[styles.tableCol, { width: '20%' }]}><Text>{(data.minor_found || 0) <= (data.max_allowed_minor || 0) ? 'Pass' : 'Fail'}</Text></View>
+                            </View>
                         </View>
                     </View>
                 </View>

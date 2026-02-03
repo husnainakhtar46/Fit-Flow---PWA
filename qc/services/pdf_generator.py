@@ -57,10 +57,18 @@ def generate_pdf_buffer(inspection):
     # Info Block
     p.setFont("Helvetica", 12)
     y_pos -= 10
-    p.drawString(50, y_pos, f"Style: {inspection.style}")
-    p.drawString(50, y_pos - 15, f"Color: {inspection.color}")
-    p.drawString(50, y_pos - 30, f"PO #: {inspection.po_number}")
     
+    # helper for label/value pair
+    def draw_pair(x, y, label, value):
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(x, y, f"{label}:")
+        p.setFont("Helvetica", 12)
+        p.drawString(x + 70, y, str(value))
+
+    # Left Column
+    draw_pair(50, y_pos, "Style", inspection.style)
+    draw_pair(50, y_pos - 20, "Color", inspection.color)
+    draw_pair(50, y_pos - 40, "PO #", inspection.po_number)
     
     # Factory Name Lookup (Manual because factory is CharField soft-FK)
     factory_name = 'N/A'
@@ -74,11 +82,13 @@ def generate_pdf_buffer(inspection):
         except Exception:
             factory_name = str(inspection.factory) # Fallback to raw value
 
-    p.drawString(300, y_pos, f"Date: {inspection.created_at.strftime('%Y-%m-%d')}")
-    p.drawString(300, y_pos - 15, f"Stage: {inspection.stage}")
-    p.drawString(300, y_pos - 30, f"Customer: {inspection.customer.name if inspection.customer else 'N/A'}")
-    p.drawString(300, y_pos - 45, f"Factory: {factory_name}")
-    y_pos -= 45
+    # Right Column
+    draw_pair(300, y_pos, "Date", inspection.created_at.strftime('%Y-%m-%d'))
+    draw_pair(300, y_pos - 20, "Stage", inspection.stage)
+    draw_pair(300, y_pos - 40, "Customer", inspection.customer.name if inspection.customer else 'N/A')
+    draw_pair(300, y_pos - 60, "Factory", factory_name)
+    
+    y_pos -= 80
 
     # Table Header (6 Samples)
     # Calculate Max Samples Used
@@ -513,10 +523,9 @@ def generate_final_inspection_pdf(final_inspection):
     
     data = [
         ["Customer:", final_inspection.customer.name if final_inspection.customer else 'N/A', "Inspection Date:", final_inspection.inspection_date.strftime('%d-%b-%Y')],
-        ["Supplier:", final_inspection.supplier, "Order No:", final_inspection.order_no],
+        ["AQL Standard:", final_inspection.get_aql_standard_display() if hasattr(final_inspection, 'get_aql_standard_display') else final_inspection.aql_standard, "Order No:", final_inspection.order_no],
         ["Factory:", final_inspection.factory, "Style No:", final_inspection.style_no],
         ["Color:", final_inspection.color, "Inspection Attempt:", final_inspection.get_inspection_attempt_display() if hasattr(final_inspection, 'get_inspection_attempt_display') else final_inspection.inspection_attempt],
-        ["AQL Standard:", final_inspection.get_aql_standard_display() if hasattr(final_inspection, 'get_aql_standard_display') else final_inspection.aql_standard, "", ""],
     ]
     
     # Draw simple grid for info
