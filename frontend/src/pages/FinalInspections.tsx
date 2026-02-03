@@ -19,6 +19,7 @@ interface FinalInspection {
   order_no: string;
   style_no: string;
   color?: string;
+  factory?: string;
   inspection_attempt: string;
   customer: string | null;
   customer_name?: string;
@@ -70,11 +71,12 @@ export default function FinalInspections() {
 
   // Fetch final inspections with pagination
   const { data: inspectionData, isLoading, isPlaceholderData } = useQuery<PaginatedResponse<FinalInspection>>({
-    queryKey: ['finalInspections', resultFilter, page],
+    queryKey: ['finalInspections', resultFilter, page, searchTerm],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.append('page', page.toString());
       if (resultFilter) params.append('result', resultFilter);
+      if (searchTerm) params.append('search', searchTerm);
 
       const response = await api.get(`/final-inspections/?${params}`);
       return response.data;
@@ -121,12 +123,8 @@ export default function FinalInspections() {
     }
   };
 
-  // Filter inspections
-  const filteredInspections = inspections?.filter((insp) =>
-    insp.order_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    insp.style_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (insp.customer_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  );
+  // Use backend filtered results directly
+  const filteredInspections = inspections;
 
   // Debug logging
   console.log('=== FinalInspections Debug ===');

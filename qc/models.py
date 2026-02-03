@@ -623,6 +623,7 @@ class StyleMaster(models.Model):
     color = models.CharField(max_length=255, blank=True)
     season = models.CharField(max_length=100, blank=True, help_text="e.g., Fall 2026, Spring 2027")
     customer = models.ForeignKey(Customer, null=True, blank=True, on_delete=models.SET_NULL, related_name='styles')
+    factory = models.ForeignKey(Factory, null=True, blank=True, on_delete=models.SET_NULL, related_name='styles')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

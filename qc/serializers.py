@@ -397,6 +397,7 @@ class SampleCommentSerializer(serializers.ModelSerializer):
 class StyleMasterListSerializer(serializers.ModelSerializer):
     """Minimal serializer for list views."""
     customer_name = serializers.CharField(source='customer.name', read_only=True)
+    factory_name = serializers.CharField(source='factory.name', read_only=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
     comments_count = serializers.SerializerMethodField()
     
@@ -404,7 +405,8 @@ class StyleMasterListSerializer(serializers.ModelSerializer):
         model = StyleMaster
         fields = [
             'id', 'po_number', 'style_name', 'color', 'season',
-            'customer', 'customer_name', 'comments_count',
+            'customer', 'customer_name', 'factory', 'factory_name',
+            'comments_count',
             'created_at', 'created_by_username'
         ]
     
@@ -417,13 +419,14 @@ class StyleMasterSerializer(serializers.ModelSerializer):
     comments = SampleCommentSerializer(many=True, required=False)
     links = StyleLinkSerializer(many=True, required=False)
     customer_name = serializers.CharField(source='customer.name', read_only=True)
+    factory_name = serializers.CharField(source='factory.name', read_only=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
     
     class Meta:
         model = StyleMaster
         fields = [
             'id', 'po_number', 'style_name', 'color', 'season',
-            'customer', 'customer_name',
+            'customer', 'customer_name', 'factory', 'factory_name',
             'comments', 'links',
             'created_at', 'updated_at', 'created_by', 'created_by_username'
         ]

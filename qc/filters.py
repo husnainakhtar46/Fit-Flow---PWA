@@ -37,7 +37,8 @@ class InspectionFilter(django_filters.FilterSet):
             models.Q(style__icontains=value) |
             models.Q(po_number__icontains=value) |
             models.Q(customer__name__icontains=value) |
-            models.Q(created_by__username__icontains=value)
+            models.Q(created_by__username__icontains=value) |
+            models.Q(factory__icontains=value)
         )
     
     class Meta:

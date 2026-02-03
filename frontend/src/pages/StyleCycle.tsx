@@ -14,6 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '../components/ui/select';
+import { SearchableSelect } from '../components/SearchableSelect';
 import {
     Table,
     TableBody,
@@ -61,6 +62,8 @@ interface StyleMaster {
     season: string;
     customer: string;
     customer_name?: string;
+    factory?: string;
+    factory_name?: string;
     comments: SampleComment[];
     links: StyleLink[];
     created_at: string;
@@ -107,7 +110,18 @@ const StyleCycle = () => {
         color: '',
         season: '',
         customer: '',
+        factory: '',
     });
+
+    // Fetch factories
+    const { data: factoriesData } = useQuery({
+        queryKey: ['factories'],
+        queryFn: async () => {
+            const res = await api.get('/factories/');
+            return res.data.results || res.data || [];
+        },
+    });
+    const factories = Array.isArray(factoriesData) ? factoriesData : [];
 
     // Fetch customers
     const { data: customersData } = useQuery({
@@ -169,7 +183,9 @@ const StyleCycle = () => {
             queryClient.invalidateQueries({ queryKey: ['styles'] });
             setIsCreateOpen(false);
             setSelectedStyle(res.data);
-            setNewStyle({ po_number: '', style_name: '', color: '', season: '', customer: '' });
+            setIsCreateOpen(false);
+            setSelectedStyle(res.data);
+            setNewStyle({ po_number: '', style_name: '', color: '', season: '', customer: '', factory: '' });
             toast.success('Style created successfully');
         },
         onError: () => {
@@ -354,6 +370,7 @@ const StyleCycle = () => {
                                 <TableHead>Color</TableHead>
                                 <TableHead>Season</TableHead>
                                 <TableHead>Customer</TableHead>
+                                <TableHead>Factory</TableHead>
                                 <TableHead>Comments</TableHead>
                                 <TableHead>Created</TableHead>
                             </TableRow>
@@ -383,6 +400,7 @@ const StyleCycle = () => {
                                         <TableCell>{style.color || '-'}</TableCell>
                                         <TableCell>{style.season || '-'}</TableCell>
                                         <TableCell>{style.customer_name || '-'}</TableCell>
+                                        <TableCell>{style.factory_name || '-'}</TableCell>
                                         <TableCell>
                                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                                 {style.comments_count || 0}
@@ -444,21 +462,21 @@ const StyleCycle = () => {
                             </div>
                             <div>
                                 <Label>Customer</Label>
-                                <Select
+                                <SearchableSelect
                                     value={newStyle.customer}
-                                    onValueChange={(v) => setNewStyle({ ...newStyle, customer: v })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select customer" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {customers.map((c: { id: string; name: string }) => (
-                                            <SelectItem key={c.id} value={c.id}>
-                                                {c.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                    onChange={(v) => setNewStyle({ ...newStyle, customer: v })}
+                                    options={customers.map((c: any) => ({ value: c.id, label: c.name }))}
+                                    placeholder="Select customer..."
+                                />
+                            </div>
+                            <div>
+                                <Label>Factory</Label>
+                                <SearchableSelect
+                                    value={newStyle.factory || ''}
+                                    onChange={(v) => setNewStyle({ ...newStyle, factory: v })}
+                                    options={factories.map((f: any) => ({ value: f.id, label: f.name }))}
+                                    placeholder="Select factory..."
+                                />
                             </div>
                         </div>
                         <div className="flex justify-end gap-2">
@@ -506,6 +524,7 @@ const StyleCycle = () => {
                                         color: styleDetails?.color || selectedStyle.color,
                                         season: styleDetails?.season || selectedStyle.season,
                                         customer: styleDetails?.customer || selectedStyle.customer,
+                                        factory: styleDetails?.factory || selectedStyle.factory,
                                     });
                                     setIsEditOpen(true);
                                 }}
@@ -518,6 +537,7 @@ const StyleCycle = () => {
                         {styleDetails?.color && `${styleDetails.color} • `}
                         {styleDetails?.season && `${styleDetails.season} • `}
                         {styleDetails?.customer_name || 'No customer'}
+                        {styleDetails?.factory_name && ` • ${styleDetails.factory_name}`}
                     </p>
                 </div>
                 <Button
@@ -974,21 +994,21 @@ const StyleCycle = () => {
                             </div>
                             <div>
                                 <Label>Customer</Label>
-                                <Select
+                                <SearchableSelect
                                     value={newStyle.customer}
-                                    onValueChange={(v) => setNewStyle({ ...newStyle, customer: v })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select customer" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {customers.map((c: { id: string; name: string }) => (
-                                            <SelectItem key={c.id} value={c.id}>
-                                                {c.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                    onChange={(v) => setNewStyle({ ...newStyle, customer: v })}
+                                    options={customers.map((c: any) => ({ value: c.id, label: c.name }))}
+                                    placeholder="Select customer..."
+                                />
+                            </div>
+                            <div>
+                                <Label>Factory</Label>
+                                <SearchableSelect
+                                    value={newStyle.factory || ''}
+                                    onChange={(v) => setNewStyle({ ...newStyle, factory: v })}
+                                    options={factories.map((f: any) => ({ value: f.id, label: f.name }))}
+                                    placeholder="Select factory..."
+                                />
                             </div>
                         </div>
                     )}

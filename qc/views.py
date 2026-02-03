@@ -348,7 +348,8 @@ class FinalInspectionViewSet(viewsets.ModelViewSet):
     permission_classes = [CanEditFinalInspection]
     
     # Filtering and ordering
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    search_fields = ['order_no', 'style_no', 'factory', 'supplier', 'customer__name']
     ordering_fields = ['created_at', 'inspection_date', 'result', 'order_no']
     ordering = ['-created_at']
     
@@ -500,7 +501,7 @@ class StyleMasterViewSet(viewsets.ModelViewSet):
     
     # Filtering and ordering
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['po_number', 'style_name', 'customer__name', 'season']
+    search_fields = ['po_number', 'style_name', 'customer__name', 'season', 'factory__name']
     ordering_fields = ['created_at', 'po_number', 'style_name']
     ordering = ['-created_at']
     

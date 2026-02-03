@@ -382,7 +382,7 @@ const EvaluationForm = () => {
         placeholderData: (previousData) => previousData,
     });
 
-    const { data: customersData, isLoading: isCustomersLoading } = useQuery({
+    const { data: customersData } = useQuery({
         queryKey: ['customers_v2'],
         queryFn: async () => {
             try {
@@ -1151,22 +1151,16 @@ const EvaluationForm = () => {
                                             </div>
                                             <div className="space-y-2">
                                                 <Label>Customer</Label>
-                                                <Select value={watch("customer")} onValueChange={(v) => {
-                                                    setValue("customer", v);
-                                                    setValue("template", "");
-                                                    setSelectedTemplate(null);
-                                                }}>
-                                                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {customers.length === 0 ? (
-                                                            <SelectItem value="none" disabled>
-                                                                {isCustomersLoading ? 'Loading customers...' : 'No customers found'}
-                                                            </SelectItem>
-                                                        ) : (
-                                                            customers.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)
-                                                        )}
-                                                    </SelectContent>
-                                                </Select>
+                                                <SearchableSelect
+                                                    value={watch("customer")}
+                                                    onChange={(v) => {
+                                                        setValue("customer", v);
+                                                        setValue("template", "");
+                                                        setSelectedTemplate(null);
+                                                    }}
+                                                    options={customers.map((c: any) => ({ value: c.id, label: c.name }))}
+                                                    placeholder="Select Customer..."
+                                                />
                                             </div>
                                             <div className="space-y-2">
                                                 <Label>Style Template</Label>

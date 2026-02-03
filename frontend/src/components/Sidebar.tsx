@@ -7,7 +7,8 @@ const Sidebar = () => {
     const location = useLocation();
     const {
         canViewDashboard,
-        canViewTemplates
+        canViewTemplates,
+        canViewResources
     } = useAuth();
 
     // Define all navigation links with role-based visibility
@@ -53,7 +54,7 @@ const Sidebar = () => {
             href: '/resources',
             label: 'Resources',
             icon: Database,
-            visible: true // Everyone can access resources page (individual cards are protected)
+            visible: canViewResources
         },
     ];
 

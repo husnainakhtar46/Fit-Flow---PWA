@@ -97,6 +97,24 @@ const ProtectedCustomers = () => {
     );
 };
 
+const ProtectedResources = () => {
+    const { canViewResources } = useAuth();
+    return (
+        <ProtectedRoute requiredPermission={canViewResources}>
+            <Resources />
+        </ProtectedRoute>
+    );
+};
+
+const ProtectedFactories = () => {
+    const { canViewResources } = useAuth();
+    return (
+        <ProtectedRoute requiredPermission={canViewResources}>
+            <Factories />
+        </ProtectedRoute>
+    );
+};
+
 function App() {
     return (
         <QueryClientProvider client={queryClient}>
@@ -111,8 +129,8 @@ function App() {
                         <Route path="/evaluation" element={<EvaluationForm />} />
                         <Route path="/final-inspections" element={<FinalInspections />} />
                         <Route path="/customer-feedback" element={<CustomerFeedback />} />
-                        <Route path="/resources" element={<Resources />} />
-                        <Route path="/factories" element={<Factories />} />
+                        <Route path="/resources" element={<ProtectedResources />} />
+                        <Route path="/factories" element={<ProtectedFactories />} />
                         <Route path="/templates" element={<ProtectedTemplates />} />
                         <Route path="/customers" element={<ProtectedCustomers />} />
                     </Route>

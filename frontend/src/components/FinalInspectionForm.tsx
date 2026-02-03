@@ -1043,10 +1043,12 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
         <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <Label>Customer *</Label>
-            <select {...register('customer', { required: true })} className="w-full border rounded p-2 mt-1">
-              <option value="">Select Customer</option>
-              {customers?.map((c: Customer) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={watch('customer')}
+              onChange={(v) => setValue('customer', v)}
+              options={customers?.map((c: Customer) => ({ value: c.id, label: c.name }))}
+              placeholder="Select Customer..."
+            />
           </div>
           <div>
             <Label>Inspection Date *</Label>
