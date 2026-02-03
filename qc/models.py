@@ -1,6 +1,6 @@
 # qc/models.py
 import uuid
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -489,31 +489,39 @@ class FinalInspectionDefect(models.Model):
     
     def save(self, *args, **kwargs):
         """Update parent inspection's defect counts."""
-        super().save(*args, **kwargs)
-        
-        # Recalculate parent defect totals
-        inspection = self.final_inspection
-        inspection.critical_found = inspection.defects.filter(severity='Critical').aggregate(
-            total=models.Sum('count'))['total'] or 0
-        inspection.major_found = inspection.defects.filter(severity='Major').aggregate(
-            total=models.Sum('count'))['total'] or 0
-        inspection.minor_found = inspection.defects.filter(severity='Minor').aggregate(
-            total=models.Sum('count'))['total'] or 0
-        inspection.save()
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            
+            # Recalculate parent defect totals
+            inspection = self.final_inspection
+            # Lock the parent row to prevent race conditions
+            inspection = FinalInspection.objects.select_for_update().get(id=inspection.id)
+            
+            inspection.critical_found = inspection.defects.filter(severity='Critical').aggregate(
+                total=models.Sum('count'))['total'] or 0
+            inspection.major_found = inspection.defects.filter(severity='Major').aggregate(
+                total=models.Sum('count'))['total'] or 0
+            inspection.minor_found = inspection.defects.filter(severity='Minor').aggregate(
+                total=models.Sum('count'))['total'] or 0
+            inspection.save()
     
     def delete(self, *args, **kwargs):
         """Update parent inspection's defect counts on delete."""
-        inspection = self.final_inspection
-        super().delete(*args, **kwargs)
-        
-        # Recalculate parent defect totals
-        inspection.critical_found = inspection.defects.filter(severity='Critical').aggregate(
-            total=models.Sum('count'))['total'] or 0
-        inspection.major_found = inspection.defects.filter(severity='Major').aggregate(
-            total=models.Sum('count'))['total'] or 0
-        inspection.minor_found = inspection.defects.filter(severity='Minor').aggregate(
-            total=models.Sum('count'))['total'] or 0
-        inspection.save()
+        with transaction.atomic():
+            inspection = self.final_inspection
+            super().delete(*args, **kwargs)
+            
+            # Recalculate parent defect totals
+            # Lock the parent row to prevent race conditions
+            inspection = FinalInspection.objects.select_for_update().get(id=inspection.id)
+
+            inspection.critical_found = inspection.defects.filter(severity='Critical').aggregate(
+                total=models.Sum('count'))['total'] or 0
+            inspection.major_found = inspection.defects.filter(severity='Major').aggregate(
+                total=models.Sum('count'))['total'] or 0
+            inspection.minor_found = inspection.defects.filter(severity='Minor').aggregate(
+                total=models.Sum('count'))['total'] or 0
+            inspection.save()
     
     def __str__(self):
         return f"{self.description} ({self.severity}) x{self.count}"

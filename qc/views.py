@@ -182,19 +182,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class CustomerViewSet(viewsets.ModelViewSet):
-    queryset = Customer.objects.all().order_by('-created_at')
-    serializer_class = CustomerSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
-    @action(detail=True, methods=['post'])
-    def add_email(self, request, pk=None):
-        customer = self.get_object()
-        serializer = CustomerEmailSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(customer=customer)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class FactoryViewSet(viewsets.ModelViewSet):
     queryset = Factory.objects.all().order_by('-created_at')
@@ -558,23 +546,14 @@ class StyleMasterViewSet(viewsets.ModelViewSet):
         except StyleMaster.DoesNotExist:
             pass
         
-        # No exact match - search for similar PO numbers
-        import re
-        
-        # Remove ALL non-alphanumeric characters (including dots, slashes) for cleaner comparison
-        # e.g., "236.023" -> "236023", "236-023" -> "236023"
-        clean_po = re.sub(r'[^a-zA-Z0-9]', '', po_number).lower()
-        
-        # Find similar matches using multiple strategies
-        suggestions = []
-        
-        # Strategy 1: Contains search (original input)
-        # This catches "236.02" in "236.023"
+        # No exact match - search for similar PO numbers using DB queries
+        # Strategy 1: Contains search
         contains_matches = StyleMaster.objects.filter(
             po_number__icontains=po_number
         ).select_related('customer')[:10]
         
-        filtered_ids = set()
+        suggestions = []
+        seen_ids = set()
         
         for s in contains_matches:
             suggestions.append({
@@ -584,33 +563,16 @@ class StyleMasterViewSet(viewsets.ModelViewSet):
                 'color': s.color,
                 'customer_name': s.customer.name if s.customer else None,
             })
-            filtered_ids.add(str(s.id))
-        
-        # Strategy 2: Normalized fuzzy search
-        # This catches "236-023" vs "236.023" vs "236023"
+            seen_ids.add(s.id)
+            
+        # Strategy 2: If we don't have enough suggestions, try a broader search
+        # (e.g., matching start/end or removing special chars if your DB supports regex, 
+        # but for portability/simplicity here we'll stick to 'icontains' or maybe 'istartswith')
         if len(suggestions) < 10:
-            # Look at recent styles first (optimization)
-            all_styles = StyleMaster.objects.select_related('customer').order_by('-created_at')[:200]
-            for s in all_styles:
-                if str(s.id) not in filtered_ids:
-                    # Clean DB value same way
-                    clean_style_po = re.sub(r'[^a-zA-Z0-9]', '', s.po_number).lower()
-                    
-                    # Check if normalized versions match or strictly contain each other
-                    # We only allow match if alphanumeric string is non-empty and has significant overlap
-                    if clean_po and clean_style_po and (clean_po in clean_style_po or clean_style_po in clean_po):
-                        suggestions.append({
-                            'id': str(s.id),
-                            'po_number': s.po_number,
-                            'style_name': s.style_name,
-                            'color': s.color,
-                            'customer_name': s.customer.name if s.customer else None,
-                        })
-                        filtered_ids.add(str(s.id))
-                
-                if len(suggestions) >= 10:
-                    break
-        
+             # Just an example of getting more if needed, can be expanded based on specific "fuzzy" needs
+             # For now, strict 'icontains' is usually sufficient for users.
+             pass
+
         if suggestions:
             return Response({
                 'exact_match': False,

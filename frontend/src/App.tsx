@@ -30,7 +30,7 @@ const ProtectedRoute = ({
     requiredPermission: boolean;
 }) => {
     if (!requiredPermission) {
-        return <Navigate to="/evaluation" replace />;
+        return <Navigate to="/" replace />;
     }
     return <>{children}</>;
 };
@@ -131,7 +131,6 @@ function App() {
                         <Route path="/customer-feedback" element={<CustomerFeedback />} />
                         <Route path="/resources" element={<ProtectedResources />} />
                         <Route path="/factories" element={<ProtectedFactories />} />
-                        <Route path="/templates" element={<ProtectedTemplates />} />
                         <Route path="/customers" element={<ProtectedCustomers />} />
                     </Route>
 
