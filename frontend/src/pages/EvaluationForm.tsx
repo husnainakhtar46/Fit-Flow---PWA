@@ -102,6 +102,7 @@ const EvaluationForm = () => {
         decisions: [] as string[],
         stages: [] as string[],
         customer: '',
+        factory: '',
         search: '',
         ordering: '-created_at',
     });
@@ -375,6 +376,7 @@ const EvaluationForm = () => {
                 filters.stages.forEach(s => params.append('stage', s));
             }
             if (filters.customer) params.append('customer', filters.customer);
+            if (filters.factory) params.append('factory', filters.factory);
             if (filters.search) params.append('search', filters.search);
             if (filters.ordering) params.append('ordering', filters.ordering);
             return (await api.get(`/inspections/?${params.toString()}`)).data;
@@ -881,6 +883,7 @@ const EvaluationForm = () => {
             decisions: [],
             stages: [],
             customer: '',
+            factory: '',
             search: '',
             ordering: '-created_at',
         });

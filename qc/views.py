@@ -224,6 +224,7 @@ class DashboardView(APIView):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         customer_id = request.query_params.get('customer_id')
+        factory_name = request.query_params.get('factory_name')
         
         # ==================== EVALUATION ANALYTICS ====================
         # Base queryset with filters
@@ -234,6 +235,8 @@ class DashboardView(APIView):
             eval_qs = eval_qs.filter(created_at__date__lte=end_date)
         if customer_id:
             eval_qs = eval_qs.filter(customer_id=customer_id)
+        if factory_name:
+            eval_qs = eval_qs.filter(factory=factory_name)
         
         total_inspections = eval_qs.count()
         pass_count = eval_qs.filter(decision="Accepted").count()
@@ -266,6 +269,8 @@ class DashboardView(APIView):
             fi_qs = fi_qs.filter(inspection_date__lte=end_date)
         if customer_id:
             fi_qs = fi_qs.filter(customer_id=customer_id)
+        if factory_name:
+            fi_qs = fi_qs.filter(factory=factory_name)
         
         fi_total = fi_qs.count()
         fi_pass = fi_qs.filter(result='Pass').count()

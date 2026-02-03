@@ -1,18 +1,25 @@
+# Core Django
 Django>=4.2
+python-dotenv
+django-cors-headers
+django-filter
+django-storages[boto3]
+dj-database-url
+
+# DRF & Auth
 djangorestframework
 djangorestframework-simplejwt
+
+# Database
 psycopg2-binary
+
+# Utilities
 Pillow
-django-cors-headers
+reportlab
 gspread
 google-auth
-reportlab
-django-storages[boto3]
-python-dotenv
-dj-database-url
-django-filter
+google-cloud-storage==2.14.0
 
-# Production dependencies for Cloud Run
+# Server (Production)
 gunicorn==21.2.0
 whitenoise==6.6.0
-google-cloud-storage==2.14.0

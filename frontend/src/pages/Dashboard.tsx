@@ -6,6 +6,7 @@ import {
     PieChart, Pie, Cell, LineChart, Line, Legend
 } from 'recharts';
 import api from '../lib/api';
+import { SearchableSelect } from '../components/SearchableSelect';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -35,6 +36,18 @@ const Dashboard = () => {
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [customerId, setCustomerId] = useState<string>('');
+    const [factoryName, setFactoryName] = useState<string>('');
+
+    // Fetch Factories for Filter
+    const { data: factoriesData } = useQuery({
+        queryKey: ['factories', 'all'],
+        queryFn: async () => {
+            const res = await api.get('/factories/?page_size=100');
+            return res.data;
+        }
+    });
+
+    const factories = Array.isArray(factoriesData) ? factoriesData : factoriesData?.results || [];
 
     // Fetch Customers for Filter
     const { data: customersData } = useQuery({
@@ -49,12 +62,13 @@ const Dashboard = () => {
     const customers = Array.isArray(customersData) ? customersData : customersData?.results || [];
 
     const { data, isLoading } = useQuery({
-        queryKey: ['dashboard', startDate, endDate, customerId],
+        queryKey: ['dashboard', startDate, endDate, customerId, factoryName],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (startDate) params.append('start_date', startDate);
             if (endDate) params.append('end_date', endDate);
             if (customerId) params.append('customer_id', customerId);
+            if (factoryName) params.append('factory_name', factoryName);
 
             const url = `/dashboard/${params.toString() ? '?' + params.toString() : ''}`;
             const res = await api.get(url);
@@ -204,17 +218,21 @@ const Dashboard = () => {
                                 className="border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
-                        <div className="flex items-center gap-2">
-                            <select
+                        <div className="flex items-center gap-2 min-w-[200px]">
+                            <SearchableSelect
                                 value={customerId}
-                                onChange={(e) => setCustomerId(e.target.value)}
-                                className="border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px]"
-                            >
-                                <option value="">All Customers</option>
-                                {customers?.map((c: any) => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
+                                onChange={(val) => setCustomerId(val)}
+                                options={customers.map((c: any) => ({ value: c.id, label: c.name }))}
+                                placeholder="Select Customer"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 min-w-[200px]">
+                            <SearchableSelect
+                                value={factoryName}
+                                onChange={(val) => setFactoryName(val)}
+                                options={factories.map((f: any) => ({ value: f.name, label: f.name }))}
+                                placeholder="Select Factory"
+                            />
                         </div>
                         <div className="flex items-center gap-2 ml-auto">
                             <button
@@ -452,7 +470,7 @@ const Dashboard = () => {
                     </Card>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

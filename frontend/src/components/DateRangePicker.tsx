@@ -8,16 +8,17 @@ interface DateRangePickerProps {
   onClear: () => void;
 }
 
-const DateRangePicker: React.FC<DateRangePickerProps> = ({
+const DateRangePicker: React.FC<DateRangePickerProps & { showLabel?: boolean }> = ({
   dateFrom,
   dateTo,
   onDateFromChange,
   onDateToChange,
   onClear,
+  showLabel = true,
 }) => {
   return (
-    <div className="space-y-2">
-      <label className="block text-sm font-semibold text-gray-700">Date Range</label>
+    <div className="space-y-1">
+      {showLabel && <label className="block text-sm font-semibold text-gray-700">Date Range</label>}
       <div className="flex gap-2 items-center">
         <input
           type="date"

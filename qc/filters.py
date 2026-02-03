@@ -26,6 +26,9 @@ class InspectionFilter(django_filters.FilterSet):
     # Customer filter
     customer = django_filters.UUIDFilter(field_name='customer__id', label='Customer')
     
+    # Factory filter (CharField storing UUID or Name)
+    factory = django_filters.CharFilter(field_name='factory', lookup_expr='exact', label='Factory')
+
     # Text search across multiple fields
     search = django_filters.CharFilter(method='filter_search', label='Search')
     
@@ -43,4 +46,4 @@ class InspectionFilter(django_filters.FilterSet):
     
     class Meta:
         model = Inspection
-        fields = ['decision', 'stage', 'customer', 'created_at_after', 'created_at_before', 'search']
+        fields = ['decision', 'stage', 'customer', 'factory', 'created_at_after', 'created_at_before', 'search']

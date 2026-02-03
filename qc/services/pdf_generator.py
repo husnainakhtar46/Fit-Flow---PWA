@@ -61,10 +61,24 @@ def generate_pdf_buffer(inspection):
     p.drawString(50, y_pos - 15, f"Color: {inspection.color}")
     p.drawString(50, y_pos - 30, f"PO #: {inspection.po_number}")
     
+    
+    # Factory Name Lookup (Manual because factory is CharField soft-FK)
+    factory_name = 'N/A'
+    if inspection.factory:
+        try:
+            # Import locally to avoid circular import if needed, or rely on top-level
+            from ..models import Factory
+            factory_obj = Factory.objects.filter(id=inspection.factory).first()
+            if factory_obj:
+                factory_name = factory_obj.name
+        except Exception:
+            factory_name = str(inspection.factory) # Fallback to raw value
+
     p.drawString(300, y_pos, f"Date: {inspection.created_at.strftime('%Y-%m-%d')}")
     p.drawString(300, y_pos - 15, f"Stage: {inspection.stage}")
     p.drawString(300, y_pos - 30, f"Customer: {inspection.customer.name if inspection.customer else 'N/A'}")
-    y_pos -= 30
+    p.drawString(300, y_pos - 45, f"Factory: {factory_name}")
+    y_pos -= 45
 
     # Table Header (6 Samples)
     # Calculate Max Samples Used

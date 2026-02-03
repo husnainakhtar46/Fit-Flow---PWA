@@ -64,6 +64,7 @@ const CustomerFeedback = () => {
         decisions: [] as string[],
         stages: [] as string[],
         customer: '',
+        factory: '',
         search: '',
         ordering: '-created_at',
     });
@@ -81,6 +82,7 @@ const CustomerFeedback = () => {
             if (filters.decisions.length > 0) filters.decisions.forEach(d => params.append('decision', d));
             if (filters.stages.length > 0) filters.stages.forEach(s => params.append('stage', s));
             if (filters.customer) params.append('customer', filters.customer);
+            if (filters.factory) params.append('factory', filters.factory);
             if (filters.search) params.append('search', filters.search);
             if (filters.ordering) params.append('ordering', filters.ordering);
 
@@ -124,6 +126,7 @@ const CustomerFeedback = () => {
             decisions: [] as string[],
             stages: [] as string[],
             customer: '',
+            factory: '',
             search: '',
             ordering: '-created_at',
         });

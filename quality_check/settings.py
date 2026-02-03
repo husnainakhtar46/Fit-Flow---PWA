@@ -6,10 +6,21 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-dev-key")
 DEBUG = os.getenv("DEBUG", "1") == "1"
+
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+
+# In production, SECRET_KEY is mandatory. In dev, we can use a fallback.
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-dev-key-change-me-in-prod"
+    else:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured("The DJANGO_SECRET_KEY environment variable is not set.")
+
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-if os.getenv("K_SERVICE"):  # Running on Cloud Run
+# Cloud Run / App Engine automatically sets K_SERVICE
+if os.getenv("K_SERVICE"):
     ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
@@ -81,10 +92,6 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
-
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-import dj_database_url
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
