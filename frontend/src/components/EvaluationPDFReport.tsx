@@ -267,6 +267,10 @@ const EvaluationPDFReport = ({ data, images }: EvaluationPDFReportProps) => {
                             <Text style={styles.infoLabel}>Customer:</Text>
                             <Text style={styles.infoValue}>{data.customer_name || 'N/A'}</Text>
                         </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Factory:</Text>
+                            <Text style={styles.infoValue}>{data.factory || 'N/A'}</Text>
+                        </View>
                     </View>
                 </View>
 

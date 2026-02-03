@@ -126,6 +126,7 @@ const PDFReport = ({ data, defects, images }: PDFReportProps) => {
                         <View style={styles.summaryItem}><Text><Text style={styles.bold}>PO No:</Text> {data.order_no}</Text></View>
                         <View style={styles.summaryItem}><Text><Text style={styles.bold}>Style No:</Text> {data.style_no}</Text></View>
                         <View style={styles.summaryItem}><Text><Text style={styles.bold}>Color:</Text> {data.color}</Text></View>
+                        <View style={styles.summaryItem}><Text><Text style={styles.bold}>Factory:</Text> {data.factory || 'N/A'}</Text></View>
                         <View style={styles.summaryItem}><Text><Text style={styles.bold}>Result:</Text> {data.result || 'Pass'}</Text></View>
                     </View>
                 </View>

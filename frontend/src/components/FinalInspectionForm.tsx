@@ -76,7 +76,6 @@ interface MeasurementInput {
 
 interface FormData {
   customer: string;
-  supplier: string;
   factory: string;
   template: string; // Added template selection
   inspection_date: string;
@@ -199,6 +198,13 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
   const { register, control, handleSubmit, watch, setValue, getValues, reset } = useForm<FormData>({
     defaultValues: {
+      customer: '',
+      factory: '',
+      template: '',
+      order_no: '',
+      style_no: '',
+      color: '',
+      remarks: '',
       inspection_date: new Date().toISOString().split('T')[0],
       inspection_attempt: '1st',
       aql_standard: 'standard',
@@ -1099,6 +1105,10 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
                 setShowColorSuggestions(false);
               }}
             />
+          </div>
+          <div>
+            <Label>Factory</Label>
+            <Input {...register('factory')} placeholder="Enter factory name..." className="mt-1" autoComplete="off" />
           </div>
           <div>
             <Label>Inspection Attempt</Label>

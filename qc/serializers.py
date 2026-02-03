@@ -147,7 +147,7 @@ class InspectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Inspection
         fields = [
-            "id","style","color","po_number","stage","template","customer",
+            "id","style","color","po_number","factory","stage","template","customer",
             # Customer Comments by Category
             "customer_remarks", "customer_fit_comments", "customer_workmanship_comments",
             "customer_wash_comments", "customer_fabric_comments", "customer_accessories_comments",

@@ -118,7 +118,7 @@ const EvaluationForm = () => {
 
     const { register, control, handleSubmit, reset, setValue, watch, getValues } = useForm({
         defaultValues: {
-            style: '', color: '', po_number: '', stage: 'Proto',
+            style: '', color: '', po_number: '', factory: '', stage: 'Proto',
             customer: '', template: '',
 
             // Customer Comments by Category (Previous Feedback)
@@ -1128,6 +1128,10 @@ const EvaluationForm = () => {
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Factory</Label>
+                                                <Input {...register("factory")} autoComplete="off" placeholder="Enter factory name..." />
                                             </div>
                                             <div className="space-y-2">
                                                 <Label>Customer</Label>
