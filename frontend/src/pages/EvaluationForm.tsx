@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 
-import { FileText, Mail, Trash2, Loader2, ChevronLeft, ChevronRight, Plus, Layers } from 'lucide-react';
+import { FileText, Mail, Trash2, Loader2, ChevronLeft, ChevronRight, Plus, Layers, Pencil } from 'lucide-react';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { InlineSuggestionDropdown } from '../components/InlineSuggestionDropdown';
 import { useStyleLookup } from '../hooks/useStyleLookup';
@@ -48,7 +48,7 @@ import SyncManager from '../components/SyncManager';
 
 // --- TYPE DEFINITIONS ---
 type ImageSlot = {
-    file: File | null;
+    file: File | string | null;
     caption: string;
 };
 
@@ -79,7 +79,7 @@ const ACCESSORY_PRESETS = [
 
 const EvaluationForm = () => {
     const queryClient = useQueryClient();
-    const { canCreateInspections, isReadOnly, canEditEvaluation } = useAuth();
+    const { canCreateInspections, isReadOnly, canEditEvaluation, userType, isSuperUser } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
     const [showDecisionError, setShowDecisionError] = useState(false);
@@ -90,6 +90,7 @@ const EvaluationForm = () => {
 
     const [isManualTemplateChange, setIsManualTemplateChange] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     const [page, setPage] = useState(1);
     const [listSearch] = useState('');
@@ -686,12 +687,18 @@ const EvaluationForm = () => {
                     // Convert images to Base64 asynchronously
                     const imagesForPdf = await Promise.all(imageSlots.map(async (slot) => {
                         if (slot.file) {
-                            try {
-                                const base64 = await fileToBase64(slot.file);
-                                return { ...slot, file: base64 };
-                            } catch (e) {
-                                console.error("Failed to convert image to base64", e);
-                                return { ...slot, file: null };
+                            if (typeof slot.file === 'string') {
+                                // Already a URL/Base64, pass it through
+                                return { ...slot, file: slot.file };
+                            }
+                            if (slot.file instanceof File) {
+                                try {
+                                    const base64 = await fileToBase64(slot.file);
+                                    return { ...slot, file: base64 };
+                                } catch (e) {
+                                    console.error("Failed to convert image to base64", e);
+                                    return { ...slot, file: null };
+                                }
                             }
                         }
                         return { ...slot, file: null };
@@ -731,7 +738,11 @@ const EvaluationForm = () => {
             }
         } else {
             // --- ONLINE FLOW ---
-            createMutation.mutate(data);
+            if (editingId) {
+                updateMutation.mutate({ id: editingId, data });
+            } else {
+                createMutation.mutate(data);
+            }
         }
     };
 
@@ -754,7 +765,7 @@ const EvaluationForm = () => {
             const inspectionId = res.data.id;
 
             for (const slot of imageSlots) {
-                if (slot.file) {
+                if (slot.file && slot.file instanceof File) {
                     const formData = new FormData();
                     formData.append('image', slot.file);
                     formData.append('caption', slot.caption || 'Inspection Image');
@@ -783,6 +794,168 @@ const EvaluationForm = () => {
             toast.error('Failed to save');
         }
     });
+
+    // Update Mutation
+    const updateMutation = useMutation({
+        mutationFn: async ({ id, data }: { id: string, data: any }) => {
+            const jsonPayload = {
+                ...data,
+                measurements: data.measurements.map((m: any) => ({
+                    pom_name: m.pom_name,
+                    tol: m.tol,
+                    std: m.std === '' ? null : m.std,
+                    samples: (m.samples || []).map((s: any) => ({
+                        index: s.index,
+                        value: s.value === '' ? null : parseFloat(s.value) || null
+                    }))
+                }))
+            };
+
+            const res = await api.patch(`/inspections/${id}/`, jsonPayload);
+            const inspectionId = res.data.id;
+
+            for (const slot of imageSlots) {
+                if (slot.file) {
+                    // Only upload if it's a new file (File object), not if it's already a URL string (existing)
+                    // But wait, our API likely expects file uploads. If slot.file is a File, upload it.
+                    // If it's null, do nothing.
+                    // If slot.file is a URL string, we don't need to re-upload.
+                    if (slot.file instanceof File) {
+                        const formData = new FormData();
+                        formData.append('image', slot.file);
+                        formData.append('caption', slot.caption || 'Inspection Image');
+                        // Backend handling for "updating" or "adding" images might need clarification
+                        // Assuming appending is fine or backend handles replacement logic if caption matches?
+                        // For now we just upload new files.
+                        await api.post(`/inspections/${inspectionId}/upload_image/`, formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                    }
+                }
+            }
+            return res.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['inspections'] });
+            setIsOpen(false);
+            reset();
+            setEditingId(null);
+            setImageSlots([
+                { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+            ]);
+            setSelectedTemplate(null);
+            setIsManualTemplateChange(false);
+            toast.success('Evaluation updated');
+        },
+        onError: (err) => {
+            console.error(err);
+            toast.error('Failed to update');
+        }
+    });
+
+    // Handle Edit Inspection
+    const handleEditInspection = async (inspection: any) => {
+        try {
+            const { data } = await api.get(`/inspections/${inspection.id}/`);
+            setEditingId(inspection.id);
+            setIsOpen(true);
+
+            setIsManualTemplateChange(false);
+            setSelectedTemplate(data.template);
+
+            reset({
+                style: data.style || '',
+                color: data.color || '',
+                po_number: data.po_number || '',
+                stage: data.stage || 'Proto',
+                customer: data.customer || '',
+                factory: data.factory || '',
+                template: data.template || '',
+                decision: data.decision || '',
+
+                // Customer Comments by Category
+                customer_remarks: data.customer_remarks || '', // Fallback for old data
+                customer_fit_comments: data.customer_fit_comments || '',
+                customer_workmanship_comments: data.customer_workmanship_comments || '',
+                customer_wash_comments: data.customer_wash_comments || '',
+                customer_fabric_comments: data.customer_fabric_comments || '',
+                customer_accessories_comments: data.customer_accessories_comments || '',
+                customer_comments_addressed: data.customer_comments_addressed || false,
+
+                // QA Comments
+                qa_fit_comments: data.qa_fit_comments || '',
+                qa_workmanship_comments: data.qa_workmanship_comments || '',
+                qa_wash_comments: data.qa_wash_comments || '',
+                qa_fabric_comments: data.qa_fabric_comments || '',
+                qa_accessories_comments: data.qa_accessories_comments || '',
+
+                // Fabric Checks
+                fabric_handfeel: data.fabric_handfeel || 'OK',
+                fabric_pilling: data.fabric_pilling || 'None',
+
+                // Accessories
+                accessories_data: data.accessories_data || [],
+
+                remarks: data.remarks || '',
+
+                measurements: (data.measurements || []).map((m: any) => ({
+                    pom_name: m.pom_name,
+                    tol: m.tol,
+                    std: m.std ?? '',
+                    samples: (m.samples || []).map((s: any) => ({
+                        index: s.index,
+                        value: s.value ?? ''
+                    }))
+                }))
+            });
+
+            // Set sample count based on loaded data
+            const maxSampleIndex = Math.max(3, ...data.measurements?.flatMap((m: any) =>
+                (m.samples || []).map((s: any) => s.index)
+            ) || [3]);
+            setSampleCount(maxSampleIndex);
+
+            // Populate Image Slots (Handling URLs vs Files)
+            const loadedImages: ImageSlot[] = [
+                { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+            ];
+
+            // Debug: Log what images we got from API
+            console.log('Loaded inspection data.images:', data.images);
+
+            // Map API images to slots
+            if (data.images && Array.isArray(data.images)) {
+                data.images.forEach((img: any, index: number) => {
+                    if (index < 6) {
+                        // Handle both absolute and relative URLs
+                        let imageUrl = img.image || null;
+                        if (imageUrl && !imageUrl.startsWith('http')) {
+                            // Relative URL - prepend API base
+                            imageUrl = `${API_URL}${imageUrl}`;
+                        }
+                        console.log(`Image ${index}:`, imageUrl, 'Caption:', img.caption);
+                        loadedImages[index] = {
+                            file: imageUrl,
+                            caption: img.caption || ''
+                        };
+                    }
+                });
+            }
+            // Ensure Front/Back captions exist
+            if (!loadedImages[0].caption) loadedImages[0].caption = 'Front View';
+            if (!loadedImages[1].caption) loadedImages[1].caption = 'Back View';
+
+            console.log('Final loadedImages:', loadedImages);
+            setImageSlots(loadedImages);
+
+        } catch (e) {
+            toast.error("Failed to load details for editing");
+        }
+    };
 
     // Filter handlers
     const handleFiltersChange = (newFilters: typeof filters) => {
@@ -923,6 +1096,7 @@ const EvaluationForm = () => {
         setShowCloseConfirmation(false);
         setIsOpen(false);
         reset();
+        setEditingId(null);
         setImageSlots([
             { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
             { file: null, caption: '' }, { file: null, caption: '' },
@@ -1505,6 +1679,16 @@ const EvaluationForm = () => {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 {imageSlots.map((slot, idx) => (
                                                     <div key={idx} className="border p-3 rounded-md space-y-2 bg-gray-50">
+                                                        {/* Image Preview */}
+                                                        {slot.file && (
+                                                            <div className="mb-2 relative h-32 w-full bg-gray-200 rounded-md overflow-hidden">
+                                                                <img
+                                                                    src={typeof slot.file === 'string' ? slot.file : URL.createObjectURL(slot.file)}
+                                                                    alt={slot.caption || 'Preview'}
+                                                                    className="h-full w-full object-contain"
+                                                                />
+                                                            </div>
+                                                        )}
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-xs font-bold bg-white border px-2 py-1 rounded">#{idx + 1}</span>
                                                             {(idx === 0 || idx === 1) && <span className="text-xs text-red-500 font-bold">* Required</span>}
@@ -1618,6 +1802,11 @@ const EvaluationForm = () => {
                                             }}>
                                                 <Mail className="w-4 h-4" />
                                             </Button>
+                                            {(isSuperUser || userType === 'quality_head') && (
+                                                <Button variant="ghost" size="icon" onClick={() => handleEditInspection(inspection)}>
+                                                    <Pencil className="w-4 h-4 text-blue-500" />
+                                                </Button>
+                                            )}
                                             {canEditEvaluation && (
                                                 <Button variant="ghost" size="icon" className="text-red-500" onClick={() => { if (confirm('Delete?')) deleteMutation.mutate(inspection.id) }}>
                                                     <Trash2 className="w-4 h-4" />

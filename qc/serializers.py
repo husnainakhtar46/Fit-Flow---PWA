@@ -125,10 +125,11 @@ class InspectionListSerializer(serializers.ModelSerializer):
 
 class InspectionCopySerializer(serializers.ModelSerializer):
     measurements = MeasurementSerializer(many=True, read_only=True)
+    images = InspectionImageSerializer(many=True, read_only=True)
     class Meta:
         model = Inspection
         fields = [
-            "id","style","color","po_number","stage","template","customer",
+            "id","style","color","po_number","factory","stage","template","customer",
             # Customer Comments by Category
             "customer_remarks", "customer_fit_comments", "customer_workmanship_comments",
             "customer_wash_comments", "customer_fabric_comments", "customer_accessories_comments",
@@ -141,7 +142,7 @@ class InspectionCopySerializer(serializers.ModelSerializer):
             # Dynamic Accessories
             "accessories_data",
             # General
-            "remarks","decision","created_at","measurements",
+            "remarks","decision","created_at","measurements","images",
             "customer_decision", "customer_feedback_comments", "customer_feedback_date"
         ]
 
