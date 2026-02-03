@@ -4,6 +4,8 @@ import { useForm, useFieldArray } from 'react-hook-form';
 
 import { FileText, Mail, Trash2, Search, Copy, Loader2, ChevronLeft, ChevronRight, Plus, Layers } from 'lucide-react';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { InlineSuggestionDropdown } from '../components/InlineSuggestionDropdown';
+import { useStyleLookup } from '../hooks/useStyleLookup';
 import { toast } from 'sonner';
 import axios from 'axios';
 import api from '../lib/api';
@@ -82,8 +84,9 @@ const EvaluationForm = () => {
     const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
     const [showDecisionError, setShowDecisionError] = useState(false);
     const [isLoadingStyleComments, setIsLoadingStyleComments] = useState(false);
-    const [showPOSuggestions, setShowPOSuggestions] = useState(false);
-    const [poSuggestions, setPOSuggestions] = useState<any[]>([]);
+    const [showStyleSuggestions, setShowStyleSuggestions] = useState(false);
+    const [showColorSuggestions, setShowColorSuggestions] = useState(false);
+    const { getStylesForPO, getColorsForPO } = useStyleLookup();
 
     const [isManualTemplateChange, setIsManualTemplateChange] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -334,6 +337,15 @@ const EvaluationForm = () => {
         const timer = setTimeout(() => setDebouncedModalSearchTerm(modalSearchTerm), 500);
         return () => clearTimeout(timer);
     }, [modalSearchTerm]);
+
+    // Watch PO number to filter Style/Color suggestions
+    const poValue = watch('po_number');
+
+    // Get Style suggestions based on entered PO number
+    const styleSuggestions = poValue && poValue.length >= 2 ? getStylesForPO(poValue) : [];
+
+    // Get Color suggestions based on entered PO number
+    const colorSuggestions = poValue && poValue.length >= 2 ? getColorsForPO(poValue) : [];
 
     // Fetching
     const { data: inspectionData, isPlaceholderData } = useQuery({
@@ -1058,9 +1070,54 @@ const EvaluationForm = () => {
 
 
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                            <div className="space-y-2"><Label>Style</Label><Input {...register("style", { required: true })} /></div>
-                                            <div className="space-y-2"><Label>Color</Label><Input {...register("color")} /></div>
-                                            <div className="space-y-2"><Label>PO Number</Label><Input {...register("po_number")} /></div>
+                                            <div className="space-y-2">
+                                                <Label>PO Number</Label>
+                                                <Input {...register("po_number")} autoComplete="off" placeholder="Enter PO first..." />
+                                            </div>
+                                            <div className="space-y-2 relative">
+                                                <Label>Style *</Label>
+                                                <Input
+                                                    {...register("style", { required: true })}
+                                                    autoComplete="off"
+                                                    placeholder={styleSuggestions.length > 0 ? "Type or select from suggestions..." : "Enter style..."}
+                                                    onFocus={() => {
+                                                        if (styleSuggestions.length > 0) {
+                                                            setShowStyleSuggestions(true);
+                                                        }
+                                                    }}
+                                                />
+                                                <InlineSuggestionDropdown
+                                                    suggestions={styleSuggestions}
+                                                    isOpen={showStyleSuggestions && styleSuggestions.length > 0}
+                                                    onClose={() => setShowStyleSuggestions(false)}
+                                                    onSelect={(value) => {
+                                                        setValue('style', value);
+                                                        setShowStyleSuggestions(false);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="space-y-2 relative">
+                                                <Label>Color</Label>
+                                                <Input
+                                                    {...register("color")}
+                                                    autoComplete="off"
+                                                    placeholder={colorSuggestions.length > 0 ? "Type or select from suggestions..." : "Enter color..."}
+                                                    onFocus={() => {
+                                                        if (colorSuggestions.length > 0) {
+                                                            setShowColorSuggestions(true);
+                                                        }
+                                                    }}
+                                                />
+                                                <InlineSuggestionDropdown
+                                                    suggestions={colorSuggestions}
+                                                    isOpen={showColorSuggestions && colorSuggestions.length > 0}
+                                                    onClose={() => setShowColorSuggestions(false)}
+                                                    onSelect={(value) => {
+                                                        setValue('color', value);
+                                                        setShowColorSuggestions(false);
+                                                    }}
+                                                />
+                                            </div>
                                             <div className="space-y-2">
                                                 <Label>Stage</Label>
                                                 <Select onValueChange={(v) => setValue("stage", v)} defaultValue={watch('stage')}>
@@ -1249,20 +1306,13 @@ const EvaluationForm = () => {
                                                                     toast.info('No comments found for this PO in Style Cycle');
                                                                 }
                                                             }
-                                                            // Handle Suggestions (Fuzzy Match)
+                                                            // Handle Suggestions (Fuzzy Match) - just notify user
                                                             else if (res.data && res.data.suggestions) {
-                                                                setPOSuggestions(res.data.suggestions);
-                                                                setShowPOSuggestions(true);
+                                                                toast.info(`Found ${res.data.suggestions.length} similar PO(s). Use the PO field above for suggestions.`);
                                                             }
                                                         } catch (err: any) {
                                                             if (err.response?.status === 404) {
-                                                                // Even 404 might return suggestions now
-                                                                if (err.response.data?.suggestions) {
-                                                                    setPOSuggestions(err.response.data.suggestions);
-                                                                    setShowPOSuggestions(true);
-                                                                } else {
-                                                                    toast.info('No style found with this PO number in Style Cycle');
-                                                                }
+                                                                toast.info('No style found with this PO number in Style Cycle');
                                                             } else {
                                                                 toast.error('Failed to load comments from Style Cycle');
                                                             }
@@ -1709,89 +1759,6 @@ const EvaluationForm = () => {
                         <Button variant="destructive" onClick={handleConfirmClose}>
                             Yes, Close
                         </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
-
-            {/* PO Suggestions Dialog */}
-            <Dialog open={showPOSuggestions} onOpenChange={setShowPOSuggestions}>
-                <DialogContent className="sm:max-w-xl">
-                    <DialogHeader>
-                        <DialogTitle>PO Number Not Found</DialogTitle>
-                        <DialogDescription>
-                            We couldn't find an exact match. Did you mean one of these?
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="max-h-[300px] overflow-y-auto border rounded-md">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>PO Number</TableHead>
-                                    <TableHead>Style</TableHead>
-                                    <TableHead>Customer</TableHead>
-                                    <TableHead></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {poSuggestions.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="text-center py-4 text-gray-500">
-                                            No similar PO numbers found.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    poSuggestions.map((s) => (
-                                        <TableRow key={s.id} className="hover:bg-gray-50">
-                                            <TableCell className="font-medium">{s.po_number}</TableCell>
-                                            <TableCell>{s.style_name}</TableCell>
-                                            <TableCell>{s.customer_name || '-'}</TableCell>
-                                            <TableCell>
-                                                <Button size="sm" onClick={async () => {
-                                                    // Update PO Number field
-                                                    setValue('po_number', s.po_number);
-                                                    setShowPOSuggestions(false);
-
-                                                    // Load comments for this style
-                                                    setIsLoadingStyleComments(true);
-                                                    try {
-                                                        // Fetch by ID to be safe and accurate
-                                                        const res = await api.get(`/styles/${s.id}/`);
-                                                        const style = res.data;
-                                                        const latestComment = style.comments?.[0];
-
-                                                        if (latestComment) {
-                                                            setValue('customer_remarks', latestComment.comments_general || '');
-                                                            setValue('customer_fit_comments', latestComment.comments_fit || '');
-                                                            setValue('customer_workmanship_comments', latestComment.comments_workmanship || '');
-                                                            setValue('customer_wash_comments', latestComment.comments_wash || '');
-                                                            setValue('customer_fabric_comments', latestComment.comments_fabric || '');
-                                                            setValue('customer_accessories_comments', latestComment.comments_accessories || '');
-                                                            toast.success(`Loaded comments from Style Cycle (${latestComment.sample_type})`);
-                                                        } else {
-                                                            toast.info('Style loaded, but no comments found.');
-                                                        }
-                                                        // Also update other style info if empty
-                                                        if (!getValues('style')) setValue('style', style.style_name);
-                                                        if (!getValues('color')) setValue('color', style.color);
-                                                        if (!getValues('customer') && style.customer) setValue('customer', style.customer);
-
-                                                    } catch (err) {
-                                                        toast.error('Failed to load style details');
-                                                    } finally {
-                                                        setIsLoadingStyleComments(false);
-                                                    }
-                                                }}>
-                                                    Select
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                    <div className="flex justify-end">
-                        <Button variant="ghost" onClick={() => setShowPOSuggestions(false)}>Cancel</Button>
                     </div>
                 </DialogContent>
             </Dialog>

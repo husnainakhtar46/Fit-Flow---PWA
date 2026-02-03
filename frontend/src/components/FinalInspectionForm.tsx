@@ -25,6 +25,8 @@ import { pdf } from '@react-pdf/renderer';
 import PDFReport from './PDFReport';
 import { saveAs } from 'file-saver';
 import { SearchableSelect } from './SearchableSelect';
+import { InlineSuggestionDropdown } from './InlineSuggestionDropdown';
+import { useStyleLookup } from '../hooks/useStyleLookup';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
 
@@ -121,6 +123,11 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
   // Dynamic sample count (default 6 for final inspections)
   const [sampleCount, setSampleCount] = useState(6);
   const columnKeys = ['spec', ...Array.from({ length: sampleCount }, (_, i) => `s${i + 1}`)];
+
+  // Style/Color Suggestions State (based on Order No)
+  const [showStyleSuggestions, setShowStyleSuggestions] = useState(false);
+  const [showColorSuggestions, setShowColorSuggestions] = useState(false);
+  const { getStylesForPO, getColorsForPO } = useStyleLookup();
 
   // Helper to get sample value from measurement
   const getSampleValue = (m: MeasurementInput, sampleIndex: number): number | string | null => {
@@ -227,6 +234,16 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
   const selectedTemplateId = watch('template');
   const measurements = watch('measurements');
   const sizeChecks = watch('size_checks');
+
+
+  // Watch Order No to filter Style/Color suggestions
+  const orderNo = watch('order_no');
+
+  // Get Style suggestions based on entered Order No
+  const styleSuggestions = orderNo && orderNo.length >= 2 ? getStylesForPO(orderNo) : [];
+
+  // Get Color suggestions based on entered Order No
+  const colorSuggestions = orderNo && orderNo.length >= 2 ? getColorsForPO(orderNo) : [];
 
   // --- Effects ---
 
@@ -1030,15 +1047,58 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
           </div>
           <div>
             <Label>Order No *</Label>
-            <Input {...register('order_no', { required: true })} placeholder="PO-12345" className="mt-1" />
+            <Input
+              {...register('order_no', { required: true })}
+              placeholder="PO-12345"
+              className="mt-1"
+              autoComplete="off"
+            />
           </div>
-          <div>
+          <div className="relative">
             <Label>Style No *</Label>
-            <Input {...register('style_no', { required: true })} placeholder="STY-001" className="mt-1" />
+            <Input
+              {...register('style_no', { required: true })}
+              placeholder={styleSuggestions.length > 0 ? "Type or select from suggestions..." : "Enter style..."}
+              className="mt-1"
+              autoComplete="off"
+              onFocus={() => {
+                if (styleSuggestions.length > 0) {
+                  setShowStyleSuggestions(true);
+                }
+              }}
+            />
+            <InlineSuggestionDropdown
+              suggestions={styleSuggestions}
+              isOpen={showStyleSuggestions && styleSuggestions.length > 0}
+              onClose={() => setShowStyleSuggestions(false)}
+              onSelect={(value) => {
+                setValue('style_no', value);
+                setShowStyleSuggestions(false);
+              }}
+            />
           </div>
-          <div>
+          <div className="relative">
             <Label>Color</Label>
-            <Input {...register('color')} placeholder="Navy Blue" className="mt-1" />
+            <Input
+              {...register('color')}
+              placeholder={colorSuggestions.length > 0 ? "Type or select from suggestions..." : "Enter color..."}
+              className="mt-1"
+              autoComplete="off"
+              onFocus={() => {
+                if (colorSuggestions.length > 0) {
+                  setShowColorSuggestions(true);
+                }
+              }}
+            />
+            <InlineSuggestionDropdown
+              suggestions={colorSuggestions}
+              isOpen={showColorSuggestions && colorSuggestions.length > 0}
+              onClose={() => setShowColorSuggestions(false)}
+              onSelect={(value) => {
+                setValue('color', value);
+                setShowColorSuggestions(false);
+              }}
+            />
           </div>
           <div>
             <Label>Inspection Attempt</Label>
