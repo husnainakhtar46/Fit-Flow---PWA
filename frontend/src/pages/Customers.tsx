@@ -76,7 +76,10 @@ const Customers = () => {
         placeholderData: (previousData) => previousData,
     });
 
-    const customers = customersData?.results || [];
+    // Handle both paginated and non-paginated responses
+    const customers = Array.isArray(customersData)
+        ? customersData
+        : (customersData?.results || []);
 
     const createMutation = useMutation({
         mutationFn: async (data: CustomerForm) => {

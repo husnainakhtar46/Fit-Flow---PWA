@@ -5,7 +5,7 @@ from django.urls import path, include
 from qc.views import (
     CustomerViewSet, TemplateViewSet, InspectionViewSet, DashboardView, 
     CustomTokenObtainPairView, FilterPresetViewSet, FinalInspectionViewSet,
-    StyleMasterViewSet, SampleCommentViewSet, StyleLinkViewSet
+    StyleMasterViewSet, SampleCommentViewSet, StyleLinkViewSet, FactoryViewSet
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -16,6 +16,7 @@ router.register(r"templates", TemplateViewSet)
 router.register(r"inspections", InspectionViewSet)
 router.register(r'filter-presets', FilterPresetViewSet, basename='filterpreset')
 router.register(r'final-inspections', FinalInspectionViewSet)
+router.register(r'factories', FactoryViewSet)
 # Style Cycle routes
 router.register(r'styles', StyleMasterViewSet)
 router.register(r'sample-comments', SampleCommentViewSet)

@@ -14,6 +14,8 @@ import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
 import MobileHeader from './components/MobileHeader';
 import MobileSidebar from './components/MobileSidebar';
+import Resources from './pages/Resources';
+import Factories from './pages/Factories';
 import { useAuth } from './lib/useAuth';
 
 
@@ -109,6 +111,9 @@ function App() {
                         <Route path="/evaluation" element={<EvaluationForm />} />
                         <Route path="/final-inspections" element={<FinalInspections />} />
                         <Route path="/customer-feedback" element={<CustomerFeedback />} />
+                        <Route path="/resources" element={<Resources />} />
+                        <Route path="/factories" element={<Factories />} />
+                        <Route path="/templates" element={<ProtectedTemplates />} />
                         <Route path="/customers" element={<ProtectedCustomers />} />
                     </Route>
 

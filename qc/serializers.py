@@ -4,7 +4,7 @@ from .models import (
     Customer, CustomerEmail, Template, TemplatePOM, Inspection, Measurement, MeasurementSample, InspectionImage, FilterPreset,
     FinalInspection, FinalInspectionDefect, FinalInspectionSizeCheck, FinalInspectionImage,
     FinalInspectionMeasurement, FinalInspectionMeasurementSample,
-    StyleMaster, SampleComment, StyleLink
+    StyleMaster, SampleComment, StyleLink, Factory
 )
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
@@ -58,6 +58,12 @@ class TemplatePOMSerializer(serializers.ModelSerializer):
     class Meta:
         model = TemplatePOM
         fields = ["id", "name", "default_tol", "default_std", "order"]
+
+class FactorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Factory
+        fields = ["id", "name", "address", "contact_person", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
 class TemplateSerializer(serializers.ModelSerializer):
     poms = TemplatePOMSerializer(many=True)

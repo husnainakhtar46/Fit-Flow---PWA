@@ -67,6 +67,17 @@ class CustomerEmail(models.Model):
             return f"{self.contact_name} <{self.email}> [{self.get_email_type_display()}] ({self.customer.name})"
         return f"{self.email} [{self.get_email_type_display()}] ({self.customer.name})"
 
+class Factory(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, unique=True)
+    address = models.TextField(blank=True)
+    contact_person = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
 class Template(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, unique=True)

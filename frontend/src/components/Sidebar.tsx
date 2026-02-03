@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardCheck, Users, LogOut, MessageSquare, ClipboardList, Layers } from 'lucide-react';
+import { LayoutDashboard, ClipboardCheck, LogOut, MessageSquare, ClipboardList, Layers, FileText, Database } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/useAuth';
 
@@ -7,7 +7,6 @@ const Sidebar = () => {
     const location = useLocation();
     const {
         canViewDashboard,
-        canViewCustomers,
         canViewTemplates
     } = useAuth();
 
@@ -45,15 +44,16 @@ const Sidebar = () => {
         },
         {
             href: '/templates',
-            label: 'Templates',
+            label: 'Style Templates',
             icon: FileText,
             visible: canViewTemplates
         },
+
         {
-            href: '/customers',
-            label: 'Customers',
-            icon: Users,
-            visible: canViewCustomers
+            href: '/resources',
+            label: 'Resources',
+            icon: Database,
+            visible: true // Everyone can access resources page (individual cards are protected)
         },
     ];
 

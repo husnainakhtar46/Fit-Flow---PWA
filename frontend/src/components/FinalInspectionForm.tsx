@@ -27,6 +27,7 @@ import { saveAs } from 'file-saver';
 import { SearchableSelect } from './SearchableSelect';
 import { InlineSuggestionDropdown } from './InlineSuggestionDropdown';
 import { useStyleLookup } from '../hooks/useStyleLookup';
+import api from '../lib/api';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
 
@@ -250,6 +251,17 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
   // Get Color suggestions based on entered Order No
   const colorSuggestions = orderNo && orderNo.length >= 2 ? getColorsForPO(orderNo) : [];
+
+  // Fetch Factories
+  const { data: factoriesData } = useQuery({
+    queryKey: ['factories-all'],
+    queryFn: async () => {
+      const res = await api.get('/factories/');
+      return res.data.results || [];
+    }
+  });
+
+  const factories = factoriesData || [];
 
   // --- Effects ---
 
@@ -1108,7 +1120,12 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
           </div>
           <div>
             <Label>Factory</Label>
-            <Input {...register('factory')} placeholder="Enter factory name..." className="mt-1" autoComplete="off" />
+            <SearchableSelect
+              value={watch('factory')}
+              onChange={(v) => setValue('factory', v)}
+              options={factories.map((f: any) => ({ value: f.name, label: f.name }))}
+              placeholder="Select Factory..."
+            />
           </div>
           <div>
             <Label>Inspection Attempt</Label>

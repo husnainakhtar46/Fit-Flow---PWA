@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status, filters
+from rest_framework import viewsets, status, filters, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,11 +10,11 @@ from django.conf import settings
 from django.http import FileResponse
 import io
 from PIL import Image as PILImage
-from .models import Customer, CustomerEmail, Template, Inspection, InspectionImage, Measurement, FilterPreset
+from .models import Customer, CustomerEmail, Template, Inspection, InspectionImage, Measurement, FilterPreset, Factory
 from .serializers import (
     CustomerSerializer, CustomerEmailSerializer, TemplateSerializer, 
     InspectionSerializer, InspectionListSerializer, CustomTokenObtainPairSerializer,
-    InspectionCopySerializer, FilterPresetSerializer
+    InspectionCopySerializer, FilterPresetSerializer, FactorySerializer
 )
 from django.db.models import Prefetch
 from .filters import InspectionFilter
@@ -181,6 +181,25 @@ class CustomerViewSet(viewsets.ModelViewSet):
             serializer.save(customer=customer)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class CustomerViewSet(viewsets.ModelViewSet):
+    queryset = Customer.objects.all().order_by('-created_at')
+    serializer_class = CustomerSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=True, methods=['post'])
+    def add_email(self, request, pk=None):
+        customer = self.get_object()
+        serializer = CustomerEmailSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(customer=customer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class FactoryViewSet(viewsets.ModelViewSet):
+    queryset = Factory.objects.all().order_by('-created_at')
+    serializer_class = FactorySerializer
+    permission_classes = [permissions.IsAuthenticated]
 
 class TemplateViewSet(viewsets.ModelViewSet):
     queryset = Template.objects.all()

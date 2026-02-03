@@ -110,6 +110,17 @@ const EvaluationForm = () => {
     const [debouncedModalSearchTerm, setDebouncedModalSearchTerm] = useState('');
     const [showSearchResults, setShowSearchResults] = useState(false);
 
+    // Fetch Factories
+    const { data: factoriesData } = useQuery({
+        queryKey: ['factories-all'],
+        queryFn: async () => {
+            const res = await api.get('/factories/');
+            return res.data.results || [];
+        }
+    });
+
+    const factories = factoriesData || [];
+
     const [imageSlots, setImageSlots] = useState<ImageSlot[]>([
         { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
         { file: null, caption: '' }, { file: null, caption: '' },
@@ -1131,7 +1142,12 @@ const EvaluationForm = () => {
                                             </div>
                                             <div className="space-y-2">
                                                 <Label>Factory</Label>
-                                                <Input {...register("factory")} autoComplete="off" placeholder="Enter factory name..." />
+                                                <SearchableSelect
+                                                    value={watch("factory")}
+                                                    onChange={(v) => setValue("factory", v)}
+                                                    options={factories.map((f: any) => ({ value: f.name, label: f.name }))}
+                                                    placeholder="Select Factory..."
+                                                />
                                             </div>
                                             <div className="space-y-2">
                                                 <Label>Customer</Label>
