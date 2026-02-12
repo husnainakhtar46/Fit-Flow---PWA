@@ -123,8 +123,7 @@ const PDFReport = ({ data, defects, images }: PDFReportProps) => {
     };
 
     // Determine AQL labels based on standard (assuming 'standard' or 'strict')
-    const majorAQL = data.aql_standard === 'strict' ? '1.5' : '2.5';
-    const minorAQL = data.aql_standard === 'strict' ? '2.5' : '4.0';
+
 
     return (
         <Document>

@@ -92,6 +92,10 @@ const EvaluationForm = () => {
     const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
 
+    // State for Similar PO Suggestions Dialog
+    const [showSimilarPOsDialog, setShowSimilarPOsDialog] = useState(false);
+    const [similarPOs, setSimilarPOs] = useState<any[]>([]);
+
     const [page, setPage] = useState(1);
     const [listSearch] = useState('');
     const [, setDebouncedListSearch] = useState('');
@@ -624,6 +628,20 @@ const EvaluationForm = () => {
                 // Scroll to top of comment section roughly? Or just let user find it. 
                 // Better to scroll to it if possible, but identifying element ID is tricky dynamically without adding IDs.
                 // I will add IDs to them in the next steps or relying on user scroll for now.
+                return;
+            }
+        }
+
+        // Validate accessories have selected options
+        if (data.accessories_data && data.accessories_data.length > 0) {
+            const accessoriesWithoutOption = data.accessories_data.filter(
+                (acc: AccessoryItem) => !acc.comment || acc.comment.trim() === ''
+            );
+            if (accessoriesWithoutOption.length > 0) {
+                const accessoryNames = accessoriesWithoutOption.map((acc: AccessoryItem) => acc.name).join(', ');
+                toast.error(`Please select an option for: ${accessoryNames}`, { duration: 5000 });
+                // Scroll to accessories section
+                document.getElementById('accessories-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
         }
@@ -1378,9 +1396,10 @@ const EvaluationForm = () => {
                                                                     toast.info('No comments found for this PO in Style Cycle');
                                                                 }
                                                             }
-                                                            // Handle Suggestions (Fuzzy Match) - just notify user
+                                                            // Handle Suggestions (Fuzzy Match) - show dialog with options
                                                             else if (res.data && res.data.suggestions) {
-                                                                toast.info(`Found ${res.data.suggestions.length} similar PO(s). Use the PO field above for suggestions.`);
+                                                                setSimilarPOs(res.data.suggestions);
+                                                                setShowSimilarPOsDialog(true);
                                                             }
                                                         } catch (err: any) {
                                                             if (err.response?.status === 404) {
@@ -1485,7 +1504,7 @@ const EvaluationForm = () => {
                                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                                             {/* Dynamic Accessories Checklist (2 columns) */}
-                                            <div className="lg:col-span-2 border p-4 rounded-lg bg-gray-50">
+                                            <div id="accessories-section" className="lg:col-span-2 border p-4 rounded-lg bg-gray-50">
                                                 <div className="flex justify-between items-center mb-4">
                                                     <Label className="text-base font-bold">Accessories Checklist</Label>
                                                     <Button
@@ -1512,7 +1531,8 @@ const EvaluationForm = () => {
                                                             if (val === 'Not Ok') return 'text-red-600 font-bold';
                                                             if (val === 'Available') return 'text-orange-600 font-bold';
                                                             if (val === 'Ok' || val === 'Improved') return 'text-green-600';
-                                                            return 'text-gray-500';
+                                                            if (val === 'Missing') return 'text-gray-500';
+                                                            return 'text-gray-400';
                                                         };
 
                                                         return (
@@ -1524,7 +1544,7 @@ const EvaluationForm = () => {
                                                                         checked={isChecked}
                                                                         onChange={(e) => {
                                                                             if (e.target.checked) {
-                                                                                appendAcc({ name: preset, comment: 'Ok' }); // Default to Ok
+                                                                                appendAcc({ name: preset, comment: '' }); // Default to empty (Choose Option)
                                                                             } else {
                                                                                 if (existingIndex !== -1) removeAcc(existingIndex);
                                                                             }
@@ -1540,13 +1560,14 @@ const EvaluationForm = () => {
                                                                             onValueChange={(val) => setValue(`accessories_data.${existingIndex}.comment`, val, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
                                                                         >
                                                                             <SelectTrigger className={`h-7 text-xs bg-gray-50 ${getStyle(currentVal)}`}>
-                                                                                <SelectValue placeholder="Status" />
+                                                                                <SelectValue placeholder="Choose Option" />
                                                                             </SelectTrigger>
                                                                             <SelectContent>
                                                                                 <SelectItem value="Ok" className="text-green-600">Ok</SelectItem>
                                                                                 <SelectItem value="Not Ok" className="text-red-600 font-bold">Not Ok</SelectItem>
                                                                                 <SelectItem value="Improved" className="text-green-600">Improved</SelectItem>
                                                                                 <SelectItem value="Available" className="text-orange-600 font-bold">Available</SelectItem>
+                                                                                <SelectItem value="Missing" className="text-gray-500">Missing</SelectItem>
                                                                             </SelectContent>
                                                                         </Select>
                                                                     </div>
@@ -1570,7 +1591,8 @@ const EvaluationForm = () => {
                                                                 if (val === 'Not Ok') return 'text-red-600 font-bold';
                                                                 if (val === 'Available') return 'text-orange-600 font-bold';
                                                                 if (val === 'Ok' || val === 'Improved') return 'text-green-600';
-                                                                return 'text-gray-500';
+                                                                if (val === 'Missing') return 'text-gray-500';
+                                                                return 'text-gray-400';
                                                             };
 
                                                             return (
@@ -1586,13 +1608,14 @@ const EvaluationForm = () => {
                                                                             onValueChange={(val) => setValue(`accessories_data.${index}.comment`, val, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
                                                                         >
                                                                             <SelectTrigger className={`h-8 text-sm bg-white ${getStyle(currentVal)}`}>
-                                                                                <SelectValue placeholder="Status" />
+                                                                                <SelectValue placeholder="Choose Option" />
                                                                             </SelectTrigger>
                                                                             <SelectContent>
                                                                                 <SelectItem value="Ok" className="text-green-600">Ok</SelectItem>
                                                                                 <SelectItem value="Not Ok" className="text-red-600 font-bold">Not Ok</SelectItem>
                                                                                 <SelectItem value="Improved" className="text-green-600">Improved</SelectItem>
                                                                                 <SelectItem value="Available" className="text-orange-600 font-bold">Available</SelectItem>
+                                                                                <SelectItem value="Missing" className="text-gray-500">Missing</SelectItem>
                                                                             </SelectContent>
                                                                         </Select>
                                                                     </div>
@@ -1845,6 +1868,82 @@ const EvaluationForm = () => {
                         </Button>
                         <Button variant="destructive" onClick={handleConfirmClose}>
                             Yes, Close
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Similar POs Dialog */}
+            <Dialog open={showSimilarPOsDialog} onOpenChange={setShowSimilarPOsDialog}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center justify-between">
+                            PO Number Not Found
+                        </DialogTitle>
+                        <DialogDescription>
+                            We couldn't find an exact match. Did you mean one of these?
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="max-h-64 overflow-y-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>PO Number</TableHead>
+                                    <TableHead>Style</TableHead>
+                                    <TableHead>Customer</TableHead>
+                                    <TableHead></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {similarPOs.map((po: any, idx: number) => (
+                                    <TableRow key={idx}>
+                                        <TableCell className="font-medium">{po.po_number}</TableCell>
+                                        <TableCell>{po.style_name}</TableCell>
+                                        <TableCell>{po.customer_name || '-'}</TableCell>
+                                        <TableCell>
+                                            <Button
+                                                size="sm"
+                                                onClick={async () => {
+                                                    // Load comments from selected PO
+                                                    try {
+                                                        const res = await api.get(`/styles/by_po/?po_number=${encodeURIComponent(po.po_number)}`);
+                                                        if (res.data && !res.data.suggestions) {
+                                                            const style = res.data;
+                                                            const latestComment = style.comments?.[0];
+                                                            if (latestComment) {
+                                                                setValue('po_number', po.po_number);
+                                                                setValue('customer_remarks', latestComment.comments_general || '');
+                                                                setValue('customer_fit_comments', latestComment.comments_fit || '');
+                                                                setValue('customer_workmanship_comments', latestComment.comments_workmanship || '');
+                                                                setValue('customer_wash_comments', latestComment.comments_wash || '');
+                                                                setValue('customer_fabric_comments', latestComment.comments_fabric || '');
+                                                                setValue('customer_accessories_comments', latestComment.comments_accessories || '');
+                                                                toast.success(`Loaded comments from Style Cycle (${latestComment.sample_type})`);
+                                                            } else {
+                                                                setValue('po_number', po.po_number);
+                                                                toast.info('No comments found for this PO in Style Cycle');
+                                                            }
+                                                        }
+                                                        setShowSimilarPOsDialog(false);
+                                                        setSimilarPOs([]);
+                                                    } catch (err) {
+                                                        toast.error('Failed to load comments from selected PO');
+                                                    }
+                                                }}
+                                            >
+                                                Select
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                        <Button variant="ghost" onClick={() => { setShowSimilarPOsDialog(false); setSimilarPOs([]); }}>
+                            Cancel
                         </Button>
                     </div>
                 </DialogContent>

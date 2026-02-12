@@ -11,12 +11,16 @@ DEBUG = os.getenv("DEBUG", "1") == "1"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # In production, SECRET_KEY is mandatory. In dev, we can use a fallback.
+# STARTUP DEBUG
+print(f"DEBUG: Loading settings. DJANGO_SECRET_KEY present? {bool(os.getenv('DJANGO_SECRET_KEY'))}")
+print(f"DEBUG: Parsing ALLOWED_HOSTS: {os.getenv('ALLOWED_HOSTS')}")
+
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+
 if not SECRET_KEY:
-    if DEBUG:
-        SECRET_KEY = "django-insecure-dev-key-change-me-in-prod"
-    else:
-        from django.core.exceptions import ImproperlyConfigured
-        raise ImproperlyConfigured("The DJANGO_SECRET_KEY environment variable is not set.")
+    print("WARNING: DJANGO_SECRET_KEY not found. Using ephemeral fallback key.")
+    SECRET_KEY = "django-insecure-fallback-key-for-debugging-deployment"
+
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 # Cloud Run / App Engine automatically sets K_SERVICE

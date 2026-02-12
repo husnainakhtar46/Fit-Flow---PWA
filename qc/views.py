@@ -116,19 +116,35 @@ class InspectionViewSet(viewsets.ModelViewSet):
         )
         
         buffer = generate_pdf_buffer(inspection)
-        email = EmailMessage(subject, body, settings.EMAIL_HOST_USER, to_emails, cc=cc_emails if cc_emails else None)
-        email.attach(f"{inspection.style}_{inspection.po_number}_Report.pdf", buffer.getvalue(), "application/pdf")
+        filename = f"{inspection.style}_{inspection.po_number}_Report.pdf"
         
         try:
-            email.send(fail_silently=False)
-            return Response({"sent": True, "to": to_emails, "cc": cc_emails})
-        except Exception as e:
-            # Catch all email-related exceptions and return a clear error message
-            error_msg = str(e)
-            return Response(
-                {"error": f"Email failed: {error_msg}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            # Try Gmail API first (OAuth2)
+            from .gmail_service import send_gmail_message
+            
+            attachments = [(filename, buffer.getvalue(), "application/pdf")]
+            result = send_gmail_message(
+                to_emails=to_emails,
+                subject=subject,
+                body=body,
+                attachments=attachments,
+                cc_emails=cc_emails if cc_emails else None
             )
+            return Response({"sent": True, "to": to_emails, "cc": cc_emails, "method": "gmail_api"})
+            
+        except Exception as gmail_error:
+            # Fall back to SMTP if Gmail API not configured
+            try:
+                email = EmailMessage(subject, body, settings.EMAIL_HOST_USER, to_emails, cc=cc_emails if cc_emails else None)
+                email.attach(filename, buffer.getvalue(), "application/pdf")
+                email.send(fail_silently=False)
+                return Response({"sent": True, "to": to_emails, "cc": cc_emails, "method": "smtp"})
+            except Exception as smtp_error:
+                error_msg = f"Gmail API: {str(gmail_error)} | SMTP: {str(smtp_error)}"
+                return Response(
+                    {"error": f"Email failed: {error_msg}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
     @action(detail=True, methods=["patch"], permission_classes=[CanAddCustomerFeedback])
     def update_customer_feedback(self, request, pk=None):
