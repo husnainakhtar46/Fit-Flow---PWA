@@ -119,8 +119,9 @@ class InspectionListSerializer(serializers.ModelSerializer):
         model = Inspection
         fields = [
             "id","style","color","po_number","stage","template","customer",
-            "remarks","decision","created_at", "created_by_username",
-            "customer_decision", "customer_feedback_comments", "customer_feedback_date"
+            "remarks","decision","created_at", "updated_at", "created_by_username",
+            "customer_decision", "customer_feedback_comments", "customer_feedback_date",
+            "is_draft"
         ]
 
 class InspectionCopySerializer(serializers.ModelSerializer):
@@ -142,8 +143,9 @@ class InspectionCopySerializer(serializers.ModelSerializer):
             # Dynamic Accessories
             "accessories_data",
             # General
-            "remarks","decision","created_at","measurements","images",
-            "customer_decision", "customer_feedback_comments", "customer_feedback_date"
+            "remarks","decision","created_at","updated_at","measurements","images",
+            "customer_decision", "customer_feedback_comments", "customer_feedback_date",
+            "is_draft"
         ]
 
 class InspectionSerializer(serializers.ModelSerializer):
@@ -167,9 +169,10 @@ class InspectionSerializer(serializers.ModelSerializer):
             # Dynamic Accessories
             "accessories_data",
             # General
-            "remarks","decision","created_at","measurements","images",
+            "remarks","decision","created_at","updated_at","measurements","images",
             "created_by_username",
-            "customer_decision", "customer_feedback_comments", "customer_feedback_date"
+            "customer_decision", "customer_feedback_comments", "customer_feedback_date",
+            "is_draft"
         ]
 
     def create(self, validated_data):

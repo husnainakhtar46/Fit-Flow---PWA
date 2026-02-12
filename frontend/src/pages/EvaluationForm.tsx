@@ -1,18 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 
-import { FileText, Mail, Trash2, Loader2, ChevronLeft, ChevronRight, Plus, Layers, Pencil } from 'lucide-react';
+import { Plus, FileText, ChevronLeft, ChevronRight, Trash2, Save, Loader2, Clock, Layers, Pencil, FileEdit, Mail } from 'lucide-react';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { InlineSuggestionDropdown } from '../components/InlineSuggestionDropdown';
 import { useStyleLookup } from '../hooks/useStyleLookup';
+import { useAutosave } from '../hooks/useAutosave';
 import { toast } from 'sonner';
 import axios from 'axios';
 import api from '../lib/api';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
 import { useAuth } from '../lib/useAuth';
-import { db, cacheCustomers, cacheTemplates, getCachedCustomers, getCachedTemplates } from '../lib/db';
+import { db, cacheCustomers, cacheTemplates, getCachedCustomers, getCachedTemplates, saveDraftLocally } from '../lib/db';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 import EvaluationPDFReport from '../components/EvaluationPDFReport';
@@ -91,6 +92,8 @@ const EvaluationForm = () => {
     const [isManualTemplateChange, setIsManualTemplateChange] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [showResumeDraftDialog, setShowResumeDraftDialog] = useState(false);
+    const [isSavingDraft, setIsSavingDraft] = useState(false);
 
     // State for Similar PO Suggestions Dialog
     const [showSimilarPOsDialog, setShowSimilarPOsDialog] = useState(false);
@@ -172,6 +175,132 @@ const EvaluationForm = () => {
     // Dynamic sample count (default 3 for evaluations)
     const [sampleCount, setSampleCount] = useState(3);
     const columnKeys = ['std', ...Array.from({ length: sampleCount }, (_, i) => `s${i + 1}`)];
+
+    // ==================== Auto-Save Drafts ====================
+    const draftKey = useMemo(() => {
+        if (editingId) return `eval_${editingId}`;
+        return `eval_new`;
+    }, [editingId]);
+
+    const getFormDataForDraft = useCallback(() => getValues(), [getValues]);
+    const getImageSlotsForDraft = useCallback(() => {
+        // Serialize image slots (store captions only, not File blobs, for local draft)
+        return imageSlots.map(s => ({
+            hasFile: !!s.file,
+            isUrl: typeof s.file === 'string',
+            caption: s.caption,
+        }));
+    }, [imageSlots]);
+
+    const {
+        draftStatus,
+        lastSavedAt,
+        existingDraft,
+        resumeDraft,
+        clearDraft,
+        saveDraftNow,
+        dismissDraft,
+        triggerLocalSave,
+    } = useAutosave({
+        formType: 'evaluation',
+        draftKey,
+        getFormData: getFormDataForDraft,
+        getImageSlots: getImageSlotsForDraft,
+        serverId: editingId,
+        enabled: isOpen, // only auto-save when the form dialog is open
+    }) as ReturnType<typeof useAutosave> & { triggerLocalSave: () => void };
+
+    // Handle resume draft — restore form data from draft
+    const handleResumeDraft = useCallback(() => {
+        const draft = resumeDraft();
+        if (draft?.formData) {
+            reset(draft.formData);
+            // Restore template
+            if (draft.formData.template) {
+                setSelectedTemplate(draft.formData.template);
+            }
+            // Restore sample count from measurements  
+            const maxSampleIndex = Math.max(3, ...(draft.formData.measurements || []).flatMap((m: any) =>
+                (m.samples || []).map((s: any) => s.index)
+            ) || [3]);
+            setSampleCount(maxSampleIndex);
+            toast.success('Draft restored!');
+        }
+    }, [resumeDraft, reset, setSampleCount, setSelectedTemplate]);
+
+    // Show resume dialog only for local-only auto-saved drafts (not explicitly saved ones)
+    // If the user clicked "Save as Draft", the draft has a serverId and is already in "Your Drafts" list
+    useEffect(() => {
+        if (existingDraft && isOpen && !editingId && !existingDraft.serverId) {
+            const d = existingDraft.formData;
+            if (d) {
+                const hasContent = [
+                    d.style, d.color, d.po_number, d.factory,
+                    d.customer_remarks, d.customer_fit_comments,
+                    d.customer_workmanship_comments, d.customer_wash_comments,
+                    d.customer_fabric_comments, d.customer_accessories_comments,
+                    d.qa_fit_comments, d.qa_workmanship_comments,
+                    d.qa_wash_comments, d.qa_fabric_comments, d.qa_accessories_comments,
+                    d.remarks, d.decision
+                ].some(f => f && String(f).trim() !== '');
+                if (hasContent) {
+                    setShowResumeDraftDialog(true);
+                } else {
+                    dismissDraft();
+                }
+            }
+        }
+    }, [existingDraft, isOpen, editingId, dismissDraft]);
+
+    // Check if the form has any meaningful data entered
+    const formHasData = useCallback(() => {
+        const data = getValues();
+        // Check if any text field has content
+        const textFields = [
+            data.style, data.color, data.po_number, data.factory,
+            data.customer_remarks, data.customer_fit_comments,
+            data.customer_workmanship_comments, data.customer_wash_comments,
+            data.customer_fabric_comments, data.customer_accessories_comments,
+            data.qa_fit_comments, data.qa_workmanship_comments,
+            data.qa_wash_comments, data.qa_fabric_comments, data.qa_accessories_comments,
+            data.remarks, data.decision
+        ];
+        return textFields.some(f => f && String(f).trim() !== '');
+    }, [getValues]);
+
+    // Trigger local save on field blur (not on every keystroke)
+    const handleFormBlur = useCallback(() => {
+        if (isOpen && formHasData()) {
+            triggerLocalSave();
+        }
+    }, [isOpen, formHasData, triggerLocalSave]);
+
+    // handleSaveDraft — manual server save without validation
+    const handleSaveDraft = async () => {
+        setIsSavingDraft(true);
+        try {
+            await saveDraftNow();
+            await clearDraft(); // Remove the local draft so no resume dialog appears
+            queryClient.invalidateQueries({ queryKey: ['evaluation-drafts'] });
+            toast.success('Draft saved!');
+            // Close the form and reset state
+            setIsOpen(false);
+            reset();
+            setEditingId(null);
+            setImageSlots([
+                { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+            ]);
+            setSelectedTemplate(null);
+            setIsManualTemplateChange(false);
+        } catch (err) {
+            console.error('Draft save failed', err);
+            toast.error('Failed to save draft');
+        } finally {
+            setIsSavingDraft(false);
+        }
+    };
 
     // Helper to get sample value from measurement
     const getSampleValue = (m: Measurement, sampleIndex: number): number | string | null => {
@@ -768,6 +897,7 @@ const EvaluationForm = () => {
         mutationFn: async (data: any) => {
             const jsonPayload = {
                 ...data,
+                is_draft: false, // Explicitly finalize — not a draft
                 measurements: data.measurements.map((m: any) => ({
                     pom_name: m.pom_name,
                     tol: m.tol,
@@ -794,8 +924,10 @@ const EvaluationForm = () => {
             }
             return res.data;
         },
-        onSuccess: () => {
+        onSuccess: async () => {
             queryClient.invalidateQueries({ queryKey: ['inspections'] });
+            queryClient.invalidateQueries({ queryKey: ['evaluation-drafts'] });
+            await clearDraft(); // Remove local draft on successful submit
             setIsOpen(false);
             reset();
             setImageSlots([
@@ -818,6 +950,7 @@ const EvaluationForm = () => {
         mutationFn: async ({ id, data }: { id: string, data: any }) => {
             const jsonPayload = {
                 ...data,
+                is_draft: false, // Explicitly finalize — not a draft
                 measurements: data.measurements.map((m: any) => ({
                     pom_name: m.pom_name,
                     tol: m.tol,
@@ -853,8 +986,10 @@ const EvaluationForm = () => {
             }
             return res.data;
         },
-        onSuccess: () => {
+        onSuccess: async () => {
             queryClient.invalidateQueries({ queryKey: ['inspections'] });
+            queryClient.invalidateQueries({ queryKey: ['evaluation-drafts'] });
+            await clearDraft(); // Remove local draft on successful update
             setIsOpen(false);
             reset();
             setEditingId(null);
@@ -1110,8 +1245,27 @@ const EvaluationForm = () => {
         }
     };
 
-    const handleConfirmClose = () => {
+    const handleConfirmClose = async () => {
         setShowCloseConfirmation(false);
+        // Auto-save locally before closing if form has data (safety net)
+        if (formHasData()) {
+            try {
+                const formData = getValues();
+                await saveDraftLocally({
+                    draftKey,
+                    formData,
+                    imageSlots: imageSlots.map(s => ({
+                        hasFile: !!s.file,
+                        isUrl: typeof s.file === 'string',
+                        caption: s.caption,
+                    })),
+                    updatedAt: Date.now(),
+                    formType: 'evaluation',
+                });
+            } catch (err) {
+                console.error('Failed to save draft on close', err);
+            }
+        }
         setIsOpen(false);
         reset();
         setEditingId(null);
@@ -1127,6 +1281,92 @@ const EvaluationForm = () => {
     };
 
     const inspectionsList = Array.isArray(inspectionData) ? inspectionData : inspectionData?.results || [];
+
+    // Fetch server drafts
+    const { data: serverDrafts = [] } = useQuery({
+        queryKey: ['evaluation-drafts'],
+        queryFn: async () => {
+            const res = await api.get('/inspections/drafts/');
+            return res.data;
+        }
+    });
+
+    // Open a server draft for editing
+    const handleOpenDraft = async (draft: any) => {
+        try {
+            const { data } = await api.get(`/inspections/${draft.id}/`);
+            setEditingId(draft.id);
+            setIsOpen(true);
+
+            setIsManualTemplateChange(false);
+            setSelectedTemplate(data.template);
+
+            reset({
+                style: data.style || '',
+                color: data.color || '',
+                po_number: data.po_number || '',
+                stage: data.stage || 'Proto',
+                customer: data.customer || '',
+                factory: data.factory || '',
+                template: data.template || '',
+                decision: data.decision || '',
+
+                customer_remarks: data.customer_remarks || '',
+                customer_fit_comments: data.customer_fit_comments || '',
+                customer_workmanship_comments: data.customer_workmanship_comments || '',
+                customer_wash_comments: data.customer_wash_comments || '',
+                customer_fabric_comments: data.customer_fabric_comments || '',
+                customer_accessories_comments: data.customer_accessories_comments || '',
+                customer_comments_addressed: data.customer_comments_addressed || false,
+
+                qa_fit_comments: data.qa_fit_comments || '',
+                qa_workmanship_comments: data.qa_workmanship_comments || '',
+                qa_wash_comments: data.qa_wash_comments || '',
+                qa_fabric_comments: data.qa_fabric_comments || '',
+                qa_accessories_comments: data.qa_accessories_comments || '',
+
+                fabric_handfeel: data.fabric_handfeel || 'OK',
+                fabric_pilling: data.fabric_pilling || 'None',
+
+                accessories_data: data.accessories_data || [],
+
+                remarks: data.remarks || '',
+
+                measurements: (data.measurements || []).map((m: any) => ({
+                    pom_name: m.pom_name,
+                    tol: m.tol,
+                    std: m.std ?? '',
+                    samples: (m.samples || []).map((s: any) => ({
+                        index: s.index,
+                        value: s.value ?? ''
+                    }))
+                }))
+            });
+
+            const maxSampleIndex = Math.max(3, ...data.measurements?.flatMap((m: any) =>
+                (m.samples || []).map((s: any) => s.index)
+            ) || [3]);
+            setSampleCount(maxSampleIndex);
+
+            // Load images
+            const loadedImages: ImageSlot[] = [
+                { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+                { file: null, caption: '' }, { file: null, caption: '' },
+            ];
+            if (data.images && Array.isArray(data.images)) {
+                data.images.forEach((img: any, index: number) => {
+                    if (index < loadedImages.length) {
+                        loadedImages[index] = { file: img.image || null, caption: img.caption || '' };
+                    }
+                });
+            }
+            setImageSlots(loadedImages);
+        } catch (err) {
+            console.error('Failed to load draft', err);
+            toast.error('Failed to load draft');
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -1145,14 +1385,26 @@ const EvaluationForm = () => {
                                 Full screen evaluation form
                             </DialogDescription>
                             <DialogHeader className="p-4 border-b shrink-0">
-                                <DialogTitle>Evaluation</DialogTitle>
+                                <div className="flex items-center justify-between">
+                                    <DialogTitle>Evaluation</DialogTitle>
+                                    {/* Draft Status Indicator */}
+                                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                                        {draftStatus === 'saving_local' || draftStatus === 'saving_server' ? (
+                                            <><Loader2 className="w-3 h-3 animate-spin" /><span>Saving...</span></>
+                                        ) : draftStatus === 'saved' && lastSavedAt ? (
+                                            <><Clock className="w-3 h-3" /><span>Draft saved {lastSavedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span></>
+                                        ) : draftStatus === 'error' ? (
+                                            <span className="text-red-400">Draft save failed</span>
+                                        ) : null}
+                                    </div>
+                                </div>
                             </DialogHeader>
 
                             <div className="flex-1 overflow-y-auto">
                                 <div className="space-y-6 py-4 px-6 overflow-x-hidden pb-10">
 
 
-                                    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+                                    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6" onBlurCapture={handleFormBlur}>
 
 
 
@@ -1758,9 +2010,21 @@ const EvaluationForm = () => {
                                             </div>
                                         </div>
 
-                                        <Button type="submit" className="w-full h-12 text-lg" disabled={createMutation.isPending || isGeneratingPdf}>
-                                            {createMutation.isPending || isGeneratingPdf ? 'Saving...' : 'Save Evaluation'}
-                                        </Button>
+                                        <div className="flex gap-3">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="flex-1 h-12 text-md gap-2"
+                                                disabled={isSavingDraft || createMutation.isPending || isGeneratingPdf}
+                                                onClick={handleSaveDraft}
+                                            >
+                                                <Save className="w-4 h-4" />
+                                                {isSavingDraft ? 'Saving Draft...' : 'Save as Draft'}
+                                            </Button>
+                                            <Button type="submit" className="flex-[2] h-12 text-lg" disabled={createMutation.isPending || isGeneratingPdf}>
+                                                {createMutation.isPending || isGeneratingPdf ? 'Saving...' : 'Save Evaluation'}
+                                            </Button>
+                                        </div>
                                     </form>
                                 </div>
                             </div>
@@ -1770,11 +2034,64 @@ const EvaluationForm = () => {
             </div >
 
             {/* Main List */}
-            < InspectionFilters
+            <InspectionFilters
                 filters={filters}
                 onFiltersChange={handleFiltersChange}
                 onClearAll={handleClearFilters}
             />
+
+            {/* Drafts Section */}
+            {serverDrafts.length > 0 && (
+                <div className="border rounded-lg bg-amber-50 border-amber-200">
+                    <div className="px-4 py-3 border-b border-amber-200 flex items-center gap-2">
+                        <FileEdit className="w-4 h-4 text-amber-600" />
+                        <span className="font-semibold text-amber-800">Your Drafts</span>
+                        <span className="text-xs text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">{serverDrafts.length}</span>
+                    </div>
+                    <Table>
+                        <TableBody>
+                            {serverDrafts.map((draft: any) => (
+                                <TableRow key={draft.id} className="hover:bg-amber-100/50 cursor-pointer" onClick={() => handleOpenDraft(draft)}>
+                                    <TableCell className="font-medium">{draft.style || <span className="text-gray-400 italic">No style</span>}</TableCell>
+                                    <TableCell className="text-sm text-gray-600">{draft.po_number || '-'}</TableCell>
+                                    <TableCell className="text-sm text-gray-600">{draft.stage || '-'}</TableCell>
+                                    <TableCell className="text-xs text-gray-500">
+                                        {draft.updated_at ? new Date(draft.updated_at).toLocaleString('en-GB', {
+                                            day: '2-digit', month: '2-digit', year: 'numeric',
+                                            hour: '2-digit', minute: '2-digit', hour12: false
+                                        }).replace(',', '') : '-'}
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="px-2 py-1 rounded text-xs font-bold bg-amber-200 text-amber-800">Draft</span>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="outline" size="sm" className="text-amber-700 border-amber-300 hover:bg-amber-100" onClick={(e) => { e.stopPropagation(); handleOpenDraft(draft); }}>
+                                            <Pencil className="w-3 h-3 mr-1" /> Continue
+                                        </Button>
+                                        {canEditEvaluation && (
+                                            <Button variant="ghost" size="icon" className="text-red-500 ml-1" onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (confirm('Delete this draft?')) {
+                                                    try {
+                                                        await api.delete(`/inspections/${draft.id}/`);
+                                                        queryClient.invalidateQueries({ queryKey: ['evaluation-drafts'] });
+                                                        toast.success('Draft deleted');
+                                                    } catch (err) {
+                                                        console.error('Failed to delete draft', err);
+                                                        toast.error('Failed to delete draft');
+                                                    }
+                                                }
+                                            }}>
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
 
 
             <div className="border rounded-lg bg-white">
@@ -1868,6 +2185,27 @@ const EvaluationForm = () => {
                         </Button>
                         <Button variant="destructive" onClick={handleConfirmClose}>
                             Yes, Close
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Resume Draft Dialog */}
+            <Dialog open={showResumeDraftDialog} onOpenChange={setShowResumeDraftDialog}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Resume Draft?</DialogTitle>
+                        <DialogDescription>
+                            You have an unsaved draft from {existingDraft ? new Date(existingDraft.updatedAt).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '') : ''}.
+                            Would you like to continue where you left off?
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-3 pt-2">
+                        <Button variant="ghost" onClick={async () => { await dismissDraft(); setShowResumeDraftDialog(false); }}>
+                            Discard
+                        </Button>
+                        <Button onClick={() => { handleResumeDraft(); setShowResumeDraftDialog(false); }}>
+                            Resume Draft
                         </Button>
                     </div>
                 </DialogContent>
