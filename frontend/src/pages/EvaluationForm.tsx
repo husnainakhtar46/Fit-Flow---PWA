@@ -78,6 +78,35 @@ const ACCESSORY_PRESETS = [
     'Over Rider Tag', 'Tab Label', 'Price Ticket', 'Hook & Eye', 'Care Label'
 ];
 
+// Define initial clean state for resets
+const INITIAL_FORM_STATE = {
+    style: '', color: '', po_number: '', factory: '', stage: 'Proto',
+    customer: '', template: '',
+
+    // Customer Comments by Category (Previous Feedback)
+    customer_remarks: '',
+    customer_fit_comments: '',
+    customer_workmanship_comments: '',
+    customer_wash_comments: '',
+    customer_fabric_comments: '',
+    customer_accessories_comments: '',
+    customer_comments_addressed: false,
+
+    // QA Comments by Category
+    qa_fit_comments: '', qa_workmanship_comments: '', qa_wash_comments: '', qa_fabric_comments: '', qa_accessories_comments: '',
+
+    // Fabric Checks
+    fabric_handfeel: 'OK',
+    fabric_pilling: 'None',
+
+    // Dynamic Accessories
+    accessories_data: [] as AccessoryItem[],
+
+    remarks: '',
+    decision: '',
+    measurements: [] as Measurement[],
+};
+
 const EvaluationForm = () => {
     const queryClient = useQueryClient();
     const { canCreateInspections, isReadOnly, canEditEvaluation, userType, isSuperUser } = useAuth();
@@ -135,33 +164,7 @@ const EvaluationForm = () => {
     ]);
 
     const { register, control, handleSubmit, reset, setValue, watch, getValues } = useForm({
-        defaultValues: {
-            style: '', color: '', po_number: '', factory: '', stage: 'Proto',
-            customer: '', template: '',
-
-            // Customer Comments by Category (Previous Feedback)
-            customer_remarks: '',
-            customer_fit_comments: '',
-            customer_workmanship_comments: '',
-            customer_wash_comments: '',
-            customer_fabric_comments: '',
-            customer_accessories_comments: '',
-            customer_comments_addressed: false,
-
-            // QA Comments by Category
-            qa_fit_comments: '', qa_workmanship_comments: '', qa_wash_comments: '', qa_fabric_comments: '', qa_accessories_comments: '',
-
-            // Fabric Checks
-            fabric_handfeel: 'OK',
-            fabric_pilling: 'None',
-
-            // Dynamic Accessories
-            accessories_data: [] as AccessoryItem[],
-
-            remarks: '',
-            decision: '',
-            measurements: [] as Measurement[],
-        }
+        defaultValues: INITIAL_FORM_STATE
     });
 
     const { fields, replace } = useFieldArray({ control, name: "measurements" });
@@ -285,7 +288,7 @@ const EvaluationForm = () => {
             toast.success('Draft saved!');
             // Close the form and reset state
             setIsOpen(false);
-            reset();
+            reset(INITIAL_FORM_STATE);
             setEditingId(null);
             setImageSlots([
                 { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },
@@ -1267,7 +1270,7 @@ const EvaluationForm = () => {
             }
         }
         setIsOpen(false);
-        reset();
+        reset(INITIAL_FORM_STATE);
         setEditingId(null);
         setImageSlots([
             { file: null, caption: 'Front View' }, { file: null, caption: 'Back View' },

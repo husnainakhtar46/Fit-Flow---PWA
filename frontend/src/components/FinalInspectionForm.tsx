@@ -11,6 +11,16 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 import { Plus, Trash2, AlertCircle } from 'lucide-react';
 import { useToast } from './ui/use-toast';
 import { COMMON_DEFECTS } from '../lib/aqlCalculations';
+import { useAutosave } from '../hooks/useAutosave';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Loader2, Save } from 'lucide-react';
 import {
   AQLResultCard,
   DefectCounter,
@@ -100,6 +110,31 @@ interface FormData {
   measurements: MeasurementInput[]; // For Garment Dimensions
 }
 
+const INITIAL_FORM_STATE: FormData = {
+  customer: '',
+  factory: '',
+  template: '',
+  order_no: '',
+  style_no: '',
+  color: '',
+  remarks: '',
+  inspection_date: new Date().toISOString().split('T')[0],
+  inspection_attempt: '1st',
+  aql_standard: 'standard',
+  sample_size: 0,
+  total_order_qty: 0,
+  presented_qty: 0,
+  total_cartons: 0,
+  selected_cartons: 0,
+  carton_length: 0,
+  carton_width: 0,
+  carton_height: 0,
+  gross_weight: 0,
+  net_weight: 0,
+  size_checks: [{ size: '', order_qty: 0, packed_qty: 0 }],
+  measurements: [],
+};
+
 export default function FinalInspectionForm({ inspectionId, onClose }: FinalInspectionFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -136,6 +171,18 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
   };
 
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // --- Form Setup ---
+
+  const { register, control, handleSubmit, watch, setValue, getValues, reset } = useForm<FormData>({
+    defaultValues: INITIAL_FORM_STATE,
+  });
+
+
+
+
+
+
 
   // --- Queries with Local Caching ---
 
@@ -195,34 +242,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     enabled: !!inspectionId,
   });
 
-  // --- Form Setup ---
 
-  const { register, control, handleSubmit, watch, setValue, getValues, reset } = useForm<FormData>({
-    defaultValues: {
-      customer: '',
-      factory: '',
-      template: '',
-      order_no: '',
-      style_no: '',
-      color: '',
-      remarks: '',
-      inspection_date: new Date().toISOString().split('T')[0],
-      inspection_attempt: '1st',
-      aql_standard: 'standard',
-      sample_size: 0,
-      total_order_qty: 0,
-      presented_qty: 0,
-      total_cartons: 0,
-      selected_cartons: 0,
-      carton_length: 0,
-      carton_width: 0,
-      carton_height: 0,
-      gross_weight: 0,
-      net_weight: 0,
-      size_checks: [{ size: '', order_qty: 0, packed_qty: 0 }],
-      measurements: [],
-    },
-  });
 
   // Field Arrays
   const { fields: sizeFields, append: appendSize, remove: removeSize } = useFieldArray({
@@ -413,6 +433,80 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     maxMinor: 0,
     result: 'Pending'
   });
+
+  // Wrapper for sensitive getFormData to include non-RHF state
+  const getFullFormData = useCallback(() => {
+    const data = getValues();
+    return {
+      ...data,
+      _defectCounts: defectCounts,
+      _serverCalcs: serverCalcs,
+    };
+  }, [getValues, defectCounts, serverCalcs]);
+
+  // --- Auto-Save Hook ---
+  const {
+    draftStatus,
+    lastSavedAt,
+    existingDraft,
+    resumeDraft,
+    clearDraft,
+    saveDraftNow,
+    dismissDraft,
+    triggerLocalSave,
+  } = useAutosave({
+    formType: 'final_inspection',
+    draftKey: `final_${getValues('order_no') || 'new'}`,
+    getFormData: getFullFormData,
+    getImageSlots: () => uploadedImages,
+    serverId: inspectionId,
+    enabled: true,
+  });
+
+  // Watch for changes to trigger local save
+  useEffect(() => {
+    const subscription = watch(() => {
+      triggerLocalSave();
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, triggerLocalSave]);
+
+  // Handle Resume Draft
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+
+  useEffect(() => {
+    if (existingDraft) {
+      setShowResumeDialog(true);
+    }
+  }, [existingDraft]);
+
+  const handleResumeDraft = () => {
+    const draft = resumeDraft();
+    if (draft) {
+      // 1. Reset Form
+      reset(draft.formData);
+
+      // 2. Restore Images
+      if (draft.imageSlots && Array.isArray(draft.imageSlots)) {
+        setUploadedImages(draft.imageSlots.map((img: any) => ({
+          ...img,
+          file: new File([], "draft_image"), // Placeholder
+          previewUrl: img.previewUrl || (img.image?.startsWith('http') ? img.image : `${API_URL}${img.image}`),
+        })));
+      }
+
+      // 3. Restore Defect Counts & Server Calcs
+      if (draft.formData._defectCounts) {
+        setDefectCounts(draft.formData._defectCounts);
+      }
+      if (draft.formData._serverCalcs) {
+        setServerCalcs(draft.formData._serverCalcs);
+      }
+
+      toast({ title: "Draft Resumed", description: "Your previous work has been restored." });
+    }
+    setShowResumeDialog(false);
+  };
 
   // --- API Calculation Hook ---
   const performCalculation = useCallback(async () => {
@@ -910,6 +1004,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
       queryClient.invalidateQueries({ queryKey: ['finalInspections'] });
       queryClient.invalidateQueries({ queryKey: ['finalInspection', inspectionId] });
       toast({ title: 'Final Inspection updated successfully!' });
+      clearDraft(); // Clear draft on success
       onClose();
     },
     onError: (error: any) => {
@@ -1014,6 +1109,13 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     }
   };
 
+  const handleSaveDraft = async () => {
+    // Manual trigger for saving both local and server
+    await saveDraftNow();
+    toast({ title: "Draft Saved", description: "Your progress has been saved locally and to the server." });
+    onClose();
+  };
+
   // Prevent Enter key from submitting/closing, except in textareas
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -1029,429 +1131,456 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
   };
 
   return (
-    <form onKeyDown={handleKeyDown} onSubmit={handleSubmit(onSubmit)} className="space-y-6 w-full max-w-6xl mx-auto pb-20 px-4 md:px-6 lg:px-8" >
-      {/* Header */}
-      <div className="flex justify-between items-center border-b -mx-4 md:-mx-6 lg:-mx-8 px-4 md:px-6 lg:px-8 py-4 mb-4">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-800">{inspectionId ? 'Edit Final Inspection' : 'New Final Inspection'}</h2>
-      </div>
+    <>
+      <form onKeyDown={handleKeyDown} onSubmit={handleSubmit(onSubmit)} className="space-y-6 w-full max-w-6xl mx-auto pb-20 px-4 md:px-6 lg:px-8" >
+        {/* Header */}
+        <div className="flex justify-between items-center border-b -mx-4 md:-mx-6 lg:-mx-8 px-4 md:px-6 lg:px-8 py-4 mb-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl md:text-2xl font-bold text-gray-800">{inspectionId ? 'Edit Final Inspection' : 'New Final Inspection'}</h2>
+            {draftStatus === 'saving_local' && <span className="text-xs text-gray-400 flex items-center"><Loader2 className="w-3 h-3 animate-spin mr-1" /> Saving...</span>}
+            {draftStatus === 'saved' && <span className="text-xs text-green-600 flex items-center">Saved</span>}
+            {existingDraft && !inspectionId && <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">Restored Draft</span>}
+          </div>
+        </div>
 
-      {/* Section 1: General Information */}
-      < Card >
-        <CardHeader>
-          <CardTitle>1. General Information</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <Label>Customer *</Label>
-            <SearchableSelect
-              value={watch('customer')}
-              onChange={(v) => setValue('customer', v)}
-              options={customers?.map((c: Customer) => ({ value: c.id, label: c.name }))}
-              placeholder="Select Customer..."
-            />
-          </div>
-          <div>
-            <Label>Inspection Date *</Label>
-            <Input type="date" {...register('inspection_date', { required: true })} className="mt-1" />
-          </div>
-          <div>
-            <Label>Style Template (For Measurements)</Label>
-            <SearchableSelect
-              value={watch('template')}
-              onChange={(v) => setValue('template', v)}
-              options={templates?.filter((t: any) => !watch('customer') || t.customer === watch('customer'))
-                .map((t: any) => ({ value: t.id, label: t.name })) || []}
-              placeholder={watch("customer") ? "Select Style Template..." : "Select Customer First"}
-              disabled={!watch("customer")}
-            />
-          </div>
-          <div>
-            <Label>Order No *</Label>
-            <Input
-              {...register('order_no', { required: true })}
-              placeholder="PO-12345"
-              className="mt-1"
-              autoComplete="off"
-            />
-          </div>
-          <div className="relative">
-            <Label>Style No *</Label>
-            <Input
-              {...register('style_no', { required: true })}
-              placeholder={styleSuggestions.length > 0 ? "Type or select from suggestions..." : "Enter style..."}
-              className="mt-1"
-              autoComplete="off"
-              onFocus={() => {
-                if (styleSuggestions.length > 0) {
-                  setShowStyleSuggestions(true);
-                }
-              }}
-            />
-            <InlineSuggestionDropdown
-              suggestions={styleSuggestions}
-              isOpen={showStyleSuggestions && styleSuggestions.length > 0}
-              onClose={() => setShowStyleSuggestions(false)}
-              onSelect={(value) => {
-                setValue('style_no', value);
-                setShowStyleSuggestions(false);
-              }}
-            />
-          </div>
-          <div className="relative">
-            <Label>Color</Label>
-            <Input
-              {...register('color')}
-              placeholder={colorSuggestions.length > 0 ? "Type or select from suggestions..." : "Enter color..."}
-              className="mt-1"
-              autoComplete="off"
-              onFocus={() => {
-                if (colorSuggestions.length > 0) {
-                  setShowColorSuggestions(true);
-                }
-              }}
-            />
-            <InlineSuggestionDropdown
-              suggestions={colorSuggestions}
-              isOpen={showColorSuggestions && colorSuggestions.length > 0}
-              onClose={() => setShowColorSuggestions(false)}
-              onSelect={(value) => {
-                setValue('color', value);
-                setShowColorSuggestions(false);
-              }}
-            />
-          </div>
-          <div>
-            <Label>Factory</Label>
-            <SearchableSelect
-              value={watch('factory')}
-              onChange={(v) => setValue('factory', v)}
-              options={factories.map((f: any) => ({ value: f.name, label: f.name }))}
-              placeholder="Select Factory..."
-            />
-          </div>
-          <div>
-            <Label>Inspection Attempt</Label>
-            <select {...register('inspection_attempt')} className="w-full border rounded p-2 mt-1">
-              <option value="1st">1st Inspection</option>
-              <option value="2nd">2nd Inspection</option>
-              <option value="3rd">3rd Inspection</option>
-            </select>
-          </div>
-
-          {/* AQL Setup Block */}
-          <div className="col-span-1 md:col-span-2 lg:col-span-3 bg-blue-50 p-4 rounded-md border border-blue-100 mt-2">
-            <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" /> AQL Sampling Setup
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label className="text-blue-800">AQL Standard</Label>
-                <select {...register('aql_standard')} className="w-full border border-blue-200 rounded p-2 mt-1 bg-white">
-                  <option value="standard">Standard (0 / 2.5 / 4.0)</option>
-                  <option value="strict">Strict (0 / 1.5 / 2.5)</option>
-                </select>
-              </div>
-              <div>
-                <Label className="text-blue-800">Total Order Qty</Label>
-                <Input type="number" {...register('total_order_qty', { valueAsNumber: true })} className="mt-1 bg-white" />
-              </div>
-              <div>
-                <Label className="text-blue-800">Presented Qty (Lot Size) *</Label>
-                <Input type="number" {...register('presented_qty', { required: true, valueAsNumber: true })} className="mt-1 border-blue-300 bg-white" />
-                <p className="text-xs text-blue-600 mt-1">Sample size calculated on this qty</p>
-              </div>
-              <div>
-                <Label className="text-blue-800 font-bold">Required Sample Size</Label>
-                <Input
-                  type="number"
-                  {...register('sample_size', { valueAsNumber: true })}
-                  placeholder="Enter manually if offline"
-                  className="mt-1 font-bold text-lg border-blue-300"
-                />
-              </div>
+        {/* Section 1: General Information */}
+        < Card >
+          <CardHeader>
+            <CardTitle>1. General Information</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <Label>Customer *</Label>
+              <SearchableSelect
+                value={watch('customer')}
+                onChange={(v) => setValue('customer', v)}
+                options={customers?.map((c: Customer) => ({ value: c.id, label: c.name }))}
+                placeholder="Select Customer..."
+              />
             </div>
-          </div>
-        </CardContent>
-      </Card >
-
-      {/* Section 2: AQL Status */}
-      <AQLResultCard
-        serverCalcs={serverCalcs}
-        critical={critical}
-        major={major}
-        minor={minor}
-      />
-
-      {/* Section 3: Quantity Breakdown */}
-      < Card >
-        <CardHeader>
-          <CardTitle>3. Quantity Breakdown (Size Check)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 overflow-x-auto">
-            <div className="grid grid-cols-12 gap-2 font-semibold text-xs uppercase text-gray-500 mb-1 min-w-[600px]">
-              <div className="col-span-3">Size</div>
-              <div className="col-span-3">Order Qty</div>
-              <div className="col-span-3">Packed Qty</div>
-              <div className="col-span-2">Deviation</div>
-              <div className="col-span-1"></div>
+            <div>
+              <Label>Inspection Date *</Label>
+              <Input type="date" {...register('inspection_date', { required: true })} className="mt-1" />
+            </div>
+            <div>
+              <Label>Style Template (For Measurements)</Label>
+              <SearchableSelect
+                value={watch('template')}
+                onChange={(v) => setValue('template', v)}
+                options={templates?.filter((t: any) => !watch('customer') || t.customer === watch('customer'))
+                  .map((t: any) => ({ value: t.id, label: t.name })) || []}
+                placeholder={watch("customer") ? "Select Style Template..." : "Select Customer First"}
+                disabled={!watch("customer")}
+              />
+            </div>
+            <div>
+              <Label>Order No *</Label>
+              <Input
+                {...register('order_no', { required: true })}
+                placeholder="PO-12345"
+                className="mt-1"
+                autoComplete="off"
+              />
+            </div>
+            <div className="relative">
+              <Label>Style No *</Label>
+              <Input
+                {...register('style_no', { required: true })}
+                placeholder={styleSuggestions.length > 0 ? "Type or select from suggestions..." : "Enter style..."}
+                className="mt-1"
+                autoComplete="off"
+                onFocus={() => {
+                  if (styleSuggestions.length > 0) {
+                    setShowStyleSuggestions(true);
+                  }
+                }}
+              />
+              <InlineSuggestionDropdown
+                suggestions={styleSuggestions}
+                isOpen={showStyleSuggestions && styleSuggestions.length > 0}
+                onClose={() => setShowStyleSuggestions(false)}
+                onSelect={(value) => {
+                  setValue('style_no', value);
+                  setShowStyleSuggestions(false);
+                }}
+              />
+            </div>
+            <div className="relative">
+              <Label>Color</Label>
+              <Input
+                {...register('color')}
+                placeholder={colorSuggestions.length > 0 ? "Type or select from suggestions..." : "Enter color..."}
+                className="mt-1"
+                autoComplete="off"
+                onFocus={() => {
+                  if (colorSuggestions.length > 0) {
+                    setShowColorSuggestions(true);
+                  }
+                }}
+              />
+              <InlineSuggestionDropdown
+                suggestions={colorSuggestions}
+                isOpen={showColorSuggestions && colorSuggestions.length > 0}
+                onClose={() => setShowColorSuggestions(false)}
+                onSelect={(value) => {
+                  setValue('color', value);
+                  setShowColorSuggestions(false);
+                }}
+              />
+            </div>
+            <div>
+              <Label>Factory</Label>
+              <SearchableSelect
+                value={watch('factory')}
+                onChange={(v) => setValue('factory', v)}
+                options={factories.map((f: any) => ({ value: f.name, label: f.name }))}
+                placeholder="Select Factory..."
+              />
+            </div>
+            <div>
+              <Label>Inspection Attempt</Label>
+              <select {...register('inspection_attempt')} className="w-full border rounded p-2 mt-1">
+                <option value="1st">1st Inspection</option>
+                <option value="2nd">2nd Inspection</option>
+                <option value="3rd">3rd Inspection</option>
+              </select>
             </div>
 
-            {sizeFields.map((field, index) => {
-              const orderQty = watch(`size_checks.${index}.order_qty`);
-              const packedQty = watch(`size_checks.${index}.packed_qty`);
-              const diff = packedQty - orderQty;
-              const dev = orderQty ? ((diff / orderQty) * 100).toFixed(1) : '0.0';
-              const isHighDev = Math.abs(parseFloat(dev)) > 5;
-
-              return (
-                <div key={field.id} className="grid grid-cols-12 gap-2 items-center min-w-[600px]">
-                  <div className="col-span-3">
-                    <Input {...register(`size_checks.${index}.size` as const)} placeholder="e.g. M" className="h-9" />
-                  </div>
-                  <div className="col-span-3">
-                    <Input type="number" {...register(`size_checks.${index}.order_qty` as const, { valueAsNumber: true })} className="h-9" />
-                  </div>
-                  <div className="col-span-3">
-                    <Input type="number" {...register(`size_checks.${index}.packed_qty` as const, { valueAsNumber: true })} className="h-9" />
-                  </div>
-                  <div className="col-span-2 flex items-center">
-                    <span className={`font-mono text-sm font-bold ${isHighDev ? 'text-red-600' : 'text-gray-600'}`}>
-                      {dev}%
-                    </span>
-                  </div>
-                  <div className="col-span-1 text-right">
-                    <Button type="button" variant="ghost" size="sm" onClick={() => removeSize(index)}>
-                      <Trash2 className="h-4 w-4 text-gray-400 hover:text-red-500" />
-                    </Button>
-                  </div>
+            {/* AQL Setup Block */}
+            <div className="col-span-1 md:col-span-2 lg:col-span-3 bg-blue-50 p-4 rounded-md border border-blue-100 mt-2">
+              <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" /> AQL Sampling Setup
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-blue-800">AQL Standard</Label>
+                  <select {...register('aql_standard')} className="w-full border border-blue-200 rounded p-2 mt-1 bg-white">
+                    <option value="standard">Standard (0 / 2.5 / 4.0)</option>
+                    <option value="strict">Strict (0 / 1.5 / 2.5)</option>
+                  </select>
                 </div>
-              );
-            })}
-
-            <Button type="button" variant="outline" size="sm" onClick={() => appendSize({ size: '', order_qty: 0, packed_qty: 0 })} className="mt-2 text-xs">
-              <Plus className="h-3 w-3 mr-2" /> Add Size Row
-            </Button>
-          </div>
-        </CardContent>
-      </Card >
-
-      {/* Section 4: Measurement Chart (Size-Based) */}
-      < Card >
-        <CardHeader>
-          <CardTitle>4. Measurement Chart</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!selectedTemplateId && (
-            <div className="text-center p-6 bg-gray-50 rounded border border-dashed text-gray-500">
-              Please select a <strong>Style Template</strong> in General Information to load measurement points.
+                <div>
+                  <Label className="text-blue-800">Total Order Qty</Label>
+                  <Input type="number" {...register('total_order_qty', { valueAsNumber: true })} className="mt-1 bg-white" />
+                </div>
+                <div>
+                  <Label className="text-blue-800">Presented Qty (Lot Size) *</Label>
+                  <Input type="number" {...register('presented_qty', { required: true, valueAsNumber: true })} className="mt-1 border-blue-300 bg-white" />
+                  <p className="text-xs text-blue-600 mt-1">Sample size calculated on this qty</p>
+                </div>
+                <div>
+                  <Label className="text-blue-800 font-bold">Required Sample Size</Label>
+                  <Input
+                    type="number"
+                    {...register('sample_size', { valueAsNumber: true })}
+                    placeholder="Enter manually if offline"
+                    className="mt-1 font-bold text-lg border-blue-300"
+                  />
+                </div>
+              </div>
             </div>
-          )}
+          </CardContent>
+        </Card >
 
-          {selectedTemplateId && (
-            <Accordion type="multiple" className="w-full" defaultValue={sizeFields.map((_, i) => `item-${i}`)}>
-              {sizeFields.map((field, sizeIndex) => {
-                const sc = (sizeChecks || [])[sizeIndex];
-                const sizeName = sc && sc.size ? sc.size : `Size ${sizeIndex + 1}`;
-                // Filter measurements for this size
-                // We need to find the indices in the main `measurementFields` array that correspond to this size.
-                // Since we sync them in order, they should be grouped.
-                // But `map` inside `map` is tricky with `register`.
-                // We can filter `measurementFields` but we need the original `index` for `register`.
+        {/* Section 2: AQL Status */}
+        <AQLResultCard
+          serverCalcs={serverCalcs}
+          critical={critical}
+          major={major}
+          minor={minor}
+        />
 
-                const sizeMeasurements = measurementFields.map((field, index) => ({ field, index }))
-                  .filter(({ index }) => measurements[index]?.size_field_id === field.id);
+        {/* Section 3: Quantity Breakdown */}
+        < Card >
+          <CardHeader>
+            <CardTitle>3. Quantity Breakdown (Size Check)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 overflow-x-auto">
+              <div className="grid grid-cols-12 gap-2 font-semibold text-xs uppercase text-gray-500 mb-1 min-w-[600px]">
+                <div className="col-span-3">Size</div>
+                <div className="col-span-3">Order Qty</div>
+                <div className="col-span-3">Packed Qty</div>
+                <div className="col-span-2">Deviation</div>
+                <div className="col-span-1"></div>
+              </div>
 
-                if (sizeMeasurements.length === 0) return null;
+              {sizeFields.map((field, index) => {
+                const orderQty = watch(`size_checks.${index}.order_qty`);
+                const packedQty = watch(`size_checks.${index}.packed_qty`);
+                const diff = packedQty - orderQty;
+                const dev = orderQty ? ((diff / orderQty) * 100).toFixed(1) : '0.0';
+                const isHighDev = Math.abs(parseFloat(dev)) > 5;
 
                 return (
-                  <AccordionItem key={sizeIndex} value={`item-${sizeIndex}`}>
-                    <AccordionTrigger className="bg-gray-50 px-4 rounded-t-md hover:no-underline hover:bg-gray-100">
-                      <span className="font-bold text-lg text-blue-800">{sizeName}</span>
-                    </AccordionTrigger>
-                    <AccordionContent className="p-2 border rounded-b-md border-t-0">
-                      <div className="flex items-center justify-between mb-2 px-2">
-                        <span className="text-sm text-gray-500">Measurements (Hold & Drag to Select • Delete to Clear)</span>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSampleCount(Math.max(1, sampleCount - 1))}
-                            disabled={sampleCount <= 1}
-                          >
-                            - Sample
-                          </Button>
-                          <span className="px-2 py-1 text-sm font-medium">{sampleCount} Samples</span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSampleCount(Math.max(6, Math.min(20, sampleCount + 1)))}
-                            disabled={sampleCount >= 20}
-                          >
-                            + Sample
-                          </Button>
+                  <div key={field.id} className="grid grid-cols-12 gap-2 items-center min-w-[600px]">
+                    <div className="col-span-3">
+                      <Input {...register(`size_checks.${index}.size` as const)} placeholder="e.g. M" className="h-9" />
+                    </div>
+                    <div className="col-span-3">
+                      <Input type="number" {...register(`size_checks.${index}.order_qty` as const, { valueAsNumber: true })} className="h-9" />
+                    </div>
+                    <div className="col-span-3">
+                      <Input type="number" {...register(`size_checks.${index}.packed_qty` as const, { valueAsNumber: true })} className="h-9" />
+                    </div>
+                    <div className="col-span-2 flex items-center">
+                      <span className={`font-mono text-sm font-bold ${isHighDev ? 'text-red-600' : 'text-gray-600'}`}>
+                        {dev}%
+                      </span>
+                    </div>
+                    <div className="col-span-1 text-right">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeSize(index)}>
+                        <Trash2 className="h-4 w-4 text-gray-400 hover:text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <Button type="button" variant="outline" size="sm" onClick={() => appendSize({ size: '', order_qty: 0, packed_qty: 0 })} className="mt-2 text-xs">
+                <Plus className="h-3 w-3 mr-2" /> Add Size Row
+              </Button>
+            </div>
+          </CardContent>
+        </Card >
+
+        {/* Section 4: Measurement Chart (Size-Based) */}
+        < Card >
+          <CardHeader>
+            <CardTitle>4. Measurement Chart</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!selectedTemplateId && (
+              <div className="text-center p-6 bg-gray-50 rounded border border-dashed text-gray-500">
+                Please select a <strong>Style Template</strong> in General Information to load measurement points.
+              </div>
+            )}
+
+            {selectedTemplateId && (
+              <Accordion type="multiple" className="w-full" defaultValue={sizeFields.map((_, i) => `item-${i}`)}>
+                {sizeFields.map((field, sizeIndex) => {
+                  const sc = (sizeChecks || [])[sizeIndex];
+                  const sizeName = sc && sc.size ? sc.size : `Size ${sizeIndex + 1}`;
+                  // Filter measurements for this size
+                  // We need to find the indices in the main `measurementFields` array that correspond to this size.
+                  // Since we sync them in order, they should be grouped.
+                  // But `map` inside `map` is tricky with `register`.
+                  // We can filter `measurementFields` but we need the original `index` for `register`.
+
+                  const sizeMeasurements = measurementFields.map((field, index) => ({ field, index }))
+                    .filter(({ index }) => measurements[index]?.size_field_id === field.id);
+
+                  if (sizeMeasurements.length === 0) return null;
+
+                  return (
+                    <AccordionItem key={sizeIndex} value={`item-${sizeIndex}`}>
+                      <AccordionTrigger className="bg-gray-50 px-4 rounded-t-md hover:no-underline hover:bg-gray-100">
+                        <span className="font-bold text-lg text-blue-800">{sizeName}</span>
+                      </AccordionTrigger>
+                      <AccordionContent className="p-2 border rounded-b-md border-t-0">
+                        <div className="flex items-center justify-between mb-2 px-2">
+                          <span className="text-sm text-gray-500">Measurements (Hold & Drag to Select • Delete to Clear)</span>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSampleCount(Math.max(1, sampleCount - 1))}
+                              disabled={sampleCount <= 1}
+                            >
+                              - Sample
+                            </Button>
+                            <span className="px-2 py-1 text-sm font-medium">{sampleCount} Samples</span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSampleCount(Math.max(6, Math.min(20, sampleCount + 1)))}
+                              disabled={sampleCount >= 20}
+                            >
+                              + Sample
+                            </Button>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="overflow-x-auto">
-                        <div className={`min-w-[900px] grid gap-2 mb-2 font-bold text-xs text-gray-600 uppercase text-center bg-gray-50 p-2 rounded`}
-                          style={{ gridTemplateColumns: `2fr 1fr 1fr ${Array(sampleCount).fill('1fr').join(' ')}` }}>
-                          <div className="text-left pl-2">POM</div>
-                          <div>Tol</div>
-                          <div>Std</div>
-                          {Array.from({ length: sampleCount }, (_, i) => (
-                            <div key={i}>S{i + 1}</div>
-                          ))}
-                        </div>
+                        <div className="overflow-x-auto">
+                          <div className={`min-w-[900px] grid gap-2 mb-2 font-bold text-xs text-gray-600 uppercase text-center bg-gray-50 p-2 rounded`}
+                            style={{ gridTemplateColumns: `2fr 1fr 1fr ${Array(sampleCount).fill('1fr').join(' ')}` }}>
+                            <div className="text-left pl-2">POM</div>
+                            <div>Tol</div>
+                            <div>Std</div>
+                            {Array.from({ length: sampleCount }, (_, i) => (
+                              <div key={i}>S{i + 1}</div>
+                            ))}
+                          </div>
 
-                        {sizeMeasurements.map(({ field, index }) => {
-                          const currentPOM = measurements[index] || { samples: [] };
-                          // Extract indices for scoped navigation
-                          const sizeMeasurementIndices = sizeMeasurements.map(sm => sm.index);
+                          {sizeMeasurements.map(({ field, index }) => {
+                            const currentPOM = measurements[index] || { samples: [] };
+                            // Extract indices for scoped navigation
+                            const sizeMeasurementIndices = sizeMeasurements.map(sm => sm.index);
 
-                          return (
-                            <div key={field.id}
-                              className="min-w-[900px] grid gap-2 mb-2 items-center hover:bg-gray-50 p-1 rounded"
-                              style={{ gridTemplateColumns: `2fr 1fr 1fr ${Array(sampleCount).fill('1fr').join(' ')}` }}>
-                              {/* Read-only POM Info */}
-                              <div>
-                                <Input {...register(`measurements.${index}.pom_name`)} readOnly className="bg-transparent border-none shadow-none h-8 font-medium text-sm" />
-                              </div>
-                              <div>
-                                <Input {...register(`measurements.${index}.tol`)} readOnly className="bg-transparent border-none shadow-none h-8 text-center text-xs text-gray-500" />
-                              </div>
-                              <div>
-                                <Input
-                                  {...register(`measurements.${index}.spec`)}
-                                  className={`h-8 text-center text-sm ${isSelected(index, 'spec') ? 'bg-blue-200 ring-2 ring-blue-500 z-10 relative' : ''}`}
-                                  onPaste={handleMeasurementPaste(index, 'spec')}
-                                  onCopy={handleCopy}
-                                  onKeyDown={(e) => handleCellKeyDown(e, index, 'spec', sizeMeasurementIndices)}
-                                  onMouseDown={() => handleCellMouseDown(index, 'spec')}
-                                  onMouseEnter={() => handleCellMouseEnter(index, 'spec')}
-                                  onTouchStart={() => handleTouchStart(index, 'spec')}
-                                  onTouchEnd={handleTouchEnd}
-                                  autoComplete="off"
-                                />
-                              </div>
+                            return (
+                              <div key={field.id}
+                                className="min-w-[900px] grid gap-2 mb-2 items-center hover:bg-gray-50 p-1 rounded"
+                                style={{ gridTemplateColumns: `2fr 1fr 1fr ${Array(sampleCount).fill('1fr').join(' ')}` }}>
+                                {/* Read-only POM Info */}
+                                <div>
+                                  <Input {...register(`measurements.${index}.pom_name`)} readOnly className="bg-transparent border-none shadow-none h-8 font-medium text-sm" />
+                                </div>
+                                <div>
+                                  <Input {...register(`measurements.${index}.tol`)} readOnly className="bg-transparent border-none shadow-none h-8 text-center text-xs text-gray-500" />
+                                </div>
+                                <div>
+                                  <Input
+                                    {...register(`measurements.${index}.spec`)}
+                                    className={`h-8 text-center text-sm ${isSelected(index, 'spec') ? 'bg-blue-200 ring-2 ring-blue-500 z-10 relative' : ''}`}
+                                    onPaste={handleMeasurementPaste(index, 'spec')}
+                                    onCopy={handleCopy}
+                                    onKeyDown={(e) => handleCellKeyDown(e, index, 'spec', sizeMeasurementIndices)}
+                                    onMouseDown={() => handleCellMouseDown(index, 'spec')}
+                                    onMouseEnter={() => handleCellMouseEnter(index, 'spec')}
+                                    onTouchStart={() => handleTouchStart(index, 'spec')}
+                                    onTouchEnd={handleTouchEnd}
+                                    autoComplete="off"
+                                  />
+                                </div>
 
-                              {/* Dynamic Measurement Inputs */}
-                              {Array.from({ length: sampleCount }, (_, sampleIdx) => {
-                                const sampleNum = sampleIdx + 1;
-                                const key = `s${sampleNum}`;
-                                const sampleValue = getSampleValue(currentPOM as MeasurementInput, sampleNum);
-                                const isBad = isOutOfTolerance(String(sampleValue ?? ''), currentPOM.spec, currentPOM.tol);
+                                {/* Dynamic Measurement Inputs */}
+                                {Array.from({ length: sampleCount }, (_, sampleIdx) => {
+                                  const sampleNum = sampleIdx + 1;
+                                  const key = `s${sampleNum}`;
+                                  const sampleValue = getSampleValue(currentPOM as MeasurementInput, sampleNum);
+                                  const isBad = isOutOfTolerance(String(sampleValue ?? ''), currentPOM.spec, currentPOM.tol);
 
-                                return (
-                                  <div key={sampleNum}>
-                                    <Input
-                                      name={`measurements.${index}.${key}`} // Interaction fix: name required for querySelector navigation
-                                      type="number" step="0.1"
-                                      value={sampleValue ?? ''}
-                                      onChange={(e) => {
-                                        const newSamples = [...(currentPOM.samples || [])];
-                                        const existingIdx = newSamples.findIndex(s => s.index === sampleNum);
-                                        if (existingIdx >= 0) {
-                                          newSamples[existingIdx] = { index: sampleNum, value: e.target.value };
-                                        } else {
-                                          newSamples.push({ index: sampleNum, value: e.target.value });
-                                        }
-                                        setValue(`measurements.${index}.samples` as any, newSamples);
-                                      }}
-                                      className={`h-8 text-center text-sm 
+                                  return (
+                                    <div key={sampleNum}>
+                                      <Input
+                                        name={`measurements.${index}.${key}`} // Interaction fix: name required for querySelector navigation
+                                        type="number" step="0.1"
+                                        value={sampleValue ?? ''}
+                                        onChange={(e) => {
+                                          const newSamples = [...(currentPOM.samples || [])];
+                                          const existingIdx = newSamples.findIndex(s => s.index === sampleNum);
+                                          if (existingIdx >= 0) {
+                                            newSamples[existingIdx] = { index: sampleNum, value: e.target.value };
+                                          } else {
+                                            newSamples.push({ index: sampleNum, value: e.target.value });
+                                          }
+                                          setValue(`measurements.${index}.samples` as any, newSamples);
+                                        }}
+                                        className={`h-8 text-center text-sm 
                                         ${isSelected(index, key) ? 'bg-blue-200 ring-2 ring-blue-500 z-10 relative' : ''} 
                                         ${!isSelected(index, key) && isBad ? 'bg-red-50 text-red-600 font-bold border-red-300' : ''}
                                       `}
-                                      placeholder="-"
-                                      onPaste={handleMeasurementPaste(index, key)}
-                                      onCopy={handleCopy}
-                                      onKeyDown={(e) => handleCellKeyDown(e, index, key, sizeMeasurementIndices)}
-                                      onMouseDown={() => handleCellMouseDown(index, key)}
-                                      onMouseEnter={() => handleCellMouseEnter(index, key)}
-                                      onTouchStart={() => handleTouchStart(index, key)}
-                                      onTouchEnd={handleTouchEnd}
-                                      autoComplete="off"
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
-            </Accordion>
-          )}
-        </CardContent>
-      </Card >
+                                        placeholder="-"
+                                        onPaste={handleMeasurementPaste(index, key)}
+                                        onCopy={handleCopy}
+                                        onKeyDown={(e) => handleCellKeyDown(e, index, key, sizeMeasurementIndices)}
+                                        onMouseDown={() => handleCellMouseDown(index, key)}
+                                        onMouseEnter={() => handleCellMouseEnter(index, key)}
+                                        onTouchStart={() => handleTouchStart(index, key)}
+                                        onTouchEnd={handleTouchEnd}
+                                        autoComplete="off"
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
+            )}
+          </CardContent>
+        </Card >
 
-      {/* Section 5: Defect Breakdown */}
-      <DefectCounter
-        defectCounts={defectCounts}
-        onUpdateCount={updateDefectCount}
-        customDefect={customDefect}
-        onCustomDefectChange={setCustomDefect}
-        onAddCustomDefect={addCustomDefect}
-      />
+        {/* Section 5: Defect Breakdown */}
+        <DefectCounter
+          defectCounts={defectCounts}
+          onUpdateCount={updateDefectCount}
+          customDefect={customDefect}
+          onCustomDefectChange={setCustomDefect}
+          onAddCustomDefect={addCustomDefect}
+        />
 
-      {/* Section 6: Shipment Details */}
-      <ShipmentDetails register={register} />
+        {/* Section 6: Shipment Details */}
+        <ShipmentDetails register={register} />
 
-      {/* Section 7: Photo Evidence */}
-      <ImageUploader
-        uploadedImages={uploadedImages}
-        onImagesChange={setUploadedImages}
-      />
+        {/* Section 7: Photo Evidence */}
+        <ImageUploader
+          uploadedImages={uploadedImages}
+          onImagesChange={setUploadedImages}
+        />
 
-      {/* Section 8: Remarks */}
-      < Card >
-        <CardHeader>
-          <CardTitle>8. Final Remarks</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Textarea {...register('remarks')} rows={4} placeholder="Overall conclusion, notes for supplier, or specific observations..." />
-        </CardContent>
-      </Card >
+        {/* Section 8: Remarks */}
+        < Card >
+          <CardHeader>
+            <CardTitle>8. Final Remarks</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Textarea {...register('remarks')} rows={4} placeholder="Overall conclusion, notes for supplier, or specific observations..." />
+          </CardContent>
+        </Card >
 
-      {/* Submit Buttons */}
-      <div className="flex justify-end gap-4 pt-4 border-t">
-        <Button type="button" variant="outline" onClick={handleCancel} className="w-32">Cancel</Button>
-
-        {inspectionId ? (
-          <>
-            <Button
-              type="submit"
-              disabled={updateMutation.isPending || createMutation.isPending}
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={() => setSubmitAction('update')}
-            >
-              {updateMutation.isPending ? 'Updating...' : 'Update Report'}
-            </Button>
-            <Button
-              type="submit"
-              disabled={updateMutation.isPending || createMutation.isPending}
-              className="bg-purple-600 hover:bg-purple-700 ml-2"
-              onClick={() => setSubmitAction('saveAsNew')}
-            >
-              {createMutation.isPending ? 'Saving...' : 'Save as New Inspection'}
-            </Button>
-          </>
-        ) : (
-          <Button
-            type="submit"
-            disabled={createMutation.isPending || isGeneratingPdf}
-            className="w-48 bg-blue-600 hover:bg-blue-700"
-            onClick={() => setSubmitAction('create')}
-          >
-            {createMutation.isPending || isGeneratingPdf ? 'Processing...' : 'Submit Final Report'}
+        {/* Submit Buttons */}
+        <div className="flex justify-end gap-4 pt-4 border-t">
+          <Button type="button" variant="ghost" onClick={handleSaveDraft} className="text-gray-600 hover:text-blue-600 hover:bg-blue-50">
+            <Save className="w-4 h-4 mr-2" />
+            Save as Draft
           </Button>
-        )}
-      </div>
-    </form >
+          <Button type="button" variant="outline" onClick={handleCancel} className="w-32">Cancel</Button>
+
+          {inspectionId ? (
+            <>
+              <Button
+                type="submit"
+                disabled={updateMutation.isPending || createMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => setSubmitAction('update')}
+              >
+                {updateMutation.isPending ? 'Updating...' : 'Update Report'}
+              </Button>
+              <Button
+                type="submit"
+                disabled={updateMutation.isPending || createMutation.isPending}
+                className="bg-purple-600 hover:bg-purple-700 ml-2"
+                onClick={() => setSubmitAction('saveAsNew')}
+              >
+                {createMutation.isPending ? 'Saving...' : 'Save as New Inspection'}
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="submit"
+              disabled={createMutation.isPending || isGeneratingPdf}
+              className="w-48 bg-blue-600 hover:bg-blue-700"
+              onClick={() => setSubmitAction('create')}
+            >
+              {createMutation.isPending || isGeneratingPdf ? 'Processing...' : 'Submit Final Report'}
+            </Button>
+          )}
+        </div>
+      </form >
+
+      <Dialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resume Unsaved Draft?</DialogTitle>
+            <DialogDescription>
+              We found an unsaved draft for this inspection{lastSavedAt ? ` from ${lastSavedAt.toLocaleTimeString()}` : ''}.
+              Would you like to resume where you left off?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={dismissDraft}>Discard Draft</Button>
+            <Button onClick={handleResumeDraft}>Resume Draft</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

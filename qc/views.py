@@ -388,6 +388,10 @@ class FinalInspectionViewSet(viewsets.ModelViewSet):
         if self.action in ['retrieve', 'update', 'partial_update']:
             queryset = queryset.prefetch_related('defects', 'size_checks', 'images')
         
+        # Filter out drafts from the main list (they have their own endpoint)
+        if self.action == 'list':
+            queryset = queryset.filter(is_draft=False)
+
         # Filter by query params
         customer_id = self.request.query_params.get('customer')
         if customer_id:
@@ -444,6 +448,15 @@ class FinalInspectionViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["get"])
+    def drafts(self, request):
+        """Return only the current user's draft final inspections."""
+        drafts = FinalInspection.objects.filter(
+            is_draft=True, created_by=request.user
+        ).select_related('customer', 'created_by').order_by('-updated_at')
+        serializer = FinalInspectionListSerializer(drafts, many=True)
+        return Response(serializer.data)
     
     @action(detail=False, methods=['post'])
     def calculate_aql(self, request):

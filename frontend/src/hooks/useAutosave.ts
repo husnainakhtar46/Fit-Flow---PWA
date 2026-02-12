@@ -22,6 +22,7 @@ interface UseAutosaveReturn {
     clearDraft: () => Promise<void>;    // call after successful submit
     saveDraftNow: () => Promise<void>;  // manual draft save trigger
     dismissDraft: () => Promise<void>;  // discard local draft
+    triggerLocalSave: () => void;       // trigger local save (debounced)
 }
 
 export function useAutosave({
@@ -246,7 +247,6 @@ export function useAutosave({
         clearDraft,
         saveDraftNow,
         dismissDraft,
-        // @ts-ignore - expose for the component to call on form changes
         triggerLocalSave,
-    } as UseAutosaveReturn & { triggerLocalSave: () => void };
+    };
 }

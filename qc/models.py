@@ -422,8 +422,12 @@ class FinalInspection(models.Model):
     # Remarks
     remarks = models.TextField(blank=True)
     
+    # Draft support
+    is_draft = models.BooleanField(default=False, help_text="True if this inspection is a draft (incomplete, not finalized)")
+
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     
     def calculate_aql_limits(self):

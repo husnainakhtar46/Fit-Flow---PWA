@@ -256,7 +256,7 @@ class FinalInspectionListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'order_no', 'style_no', 'color', 'inspection_attempt', 'customer', 'customer_name',
             'inspection_date', 'result', 'total_order_qty', 'sample_size',
-            'created_at', 'created_by_username'
+            'created_at', 'updated_at', 'created_by_username', 'is_draft'
         ]
 
 
@@ -289,8 +289,8 @@ class FinalInspectionSerializer(serializers.ModelSerializer):
             'gross_weight', 'net_weight',
             'quantity_check', 'workmanship', 'packing_method',
             'marking_label', 'data_measurement', 'hand_feel',
-            'remarks', 'created_at', 'created_by', 'created_by_username',
-            'defects', 'size_checks', 'images', 'measurements'
+            'remarks', 'created_at', 'updated_at', 'created_by', 'created_by_username',
+            'defects', 'size_checks', 'images', 'measurements', 'is_draft'
         ]
     
     def create(self, validated_data):
