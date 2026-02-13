@@ -37,6 +37,8 @@ db.sqlite3-journal
 # Environment variables
 .env
 .env.local
+.env.backup
+.env.bak
 frontend/.env.production
 
 # Secrets & Credentials (DO NOT COMMIT)
@@ -48,8 +50,13 @@ service-account.json
 # Debug Scripts
 debug_db.py
 test_connect.py
+debug_api.py
 # Scripts with secrets
 scripts/setup_gmail_oauth.py
+deploy.sh
+run_host.bat
+cors.json
+package-lock.json
 
 # IDE
 .vscode/

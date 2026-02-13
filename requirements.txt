@@ -16,6 +16,7 @@ psycopg2-binary
 # Utilities
 Pillow
 reportlab
+requests
 gspread
 google-auth
 google-auth-oauthlib
