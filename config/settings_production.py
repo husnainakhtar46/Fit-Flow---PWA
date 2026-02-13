@@ -66,9 +66,9 @@ if not CORS_ALLOWED_ORIGINS[0]:  # Handle empty string resulting in ['']
 
 
 # CSRF
-# CSRF
 CSRF_TRUSTED_ORIGINS = [
     'https://*.run.app',
+    'https://fitflow-backend-226935084519.us-central1.run.app',
 ]
 csrf_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
 if csrf_env[0]:
@@ -76,6 +76,10 @@ if csrf_env[0]:
 
 
 # Security
+# Cloud Run terminates SSL at its load balancer and forwards HTTP to Django.
+# This header tells Django to trust the proxy's X-Forwarded-Proto header,
+# so Django knows the original request was HTTPS (fixes CSRF origin mismatch).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
