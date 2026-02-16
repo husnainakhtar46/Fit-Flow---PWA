@@ -1050,7 +1050,7 @@ const EvaluationForm = () => {
             // 1. Try Backend First (Online Mode)
             const response = await api.get(`/inspections/${id}/pdf/`, {
                 responseType: 'blob',
-                timeout: 8000
+                timeout: 30000
             });
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
