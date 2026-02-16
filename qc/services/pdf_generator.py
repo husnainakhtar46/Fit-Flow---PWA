@@ -443,7 +443,7 @@ def generate_pdf_buffer(inspection):
             y = current_y - img_height # Bottom-left corner for drawImage
 
             try:
-                with PILImage.open(img_obj.image.path) as pil_img:
+                with PILImage.open(img_obj.image) as pil_img:
                     if pil_img.mode in ("RGBA", "P"): pil_img = pil_img.convert("RGB")
                     pil_img.thumbnail((800, 800))
                     img_buffer = io.BytesIO()
@@ -761,7 +761,7 @@ def generate_final_inspection_pdf(final_inspection):
             
             try:
                 # Image Processing
-                with PILImage.open(img_obj.image.path) as pil_img:
+                with PILImage.open(img_obj.image) as pil_img:
                     if pil_img.mode != "RGB": pil_img = pil_img.convert("RGB")
                     pil_img.thumbnail((600, 600))
                     img_buffer = io.BytesIO()
