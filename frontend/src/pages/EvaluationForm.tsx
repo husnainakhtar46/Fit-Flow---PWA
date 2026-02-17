@@ -12,7 +12,7 @@ import api from '../lib/api';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
 import { useAuth } from '../lib/useAuth';
-import { db, cacheCustomers, cacheTemplates, getCachedCustomers, getCachedTemplates } from '../lib/db';
+import { db, cacheCustomers, cacheTemplates, cacheFactories, getCachedCustomers, getCachedTemplates, getCachedFactories } from '../lib/db';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 import EvaluationPDFReport from '../components/EvaluationPDFReport';
@@ -118,9 +118,22 @@ const EvaluationForm = () => {
     const { data: factoriesData } = useQuery({
         queryKey: ['factories-all'],
         queryFn: async () => {
-            const res = await api.get('/factories/');
-            return res.data.results || [];
-        }
+            try {
+                const res = await api.get('/factories/');
+                const data = res.data.results || [];
+
+                // Cache for offline use
+                try { await cacheFactories(data); } catch (e) { console.warn('Factory cache fail', e); }
+
+                return data;
+            } catch (error) {
+                console.error('Factory fetch failed:', error);
+                const cached = await getCachedFactories();
+                return cached || [];
+            }
+        },
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        retry: 1,
     });
 
     const factories = factoriesData || [];
