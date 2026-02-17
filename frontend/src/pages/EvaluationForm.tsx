@@ -185,7 +185,22 @@ const EvaluationForm = () => {
         return `eval_new`;
     }, [editingId]);
 
-    const getFormDataForDraft = useCallback(() => getValues(), [getValues]);
+    const getFormDataForDraft = useCallback(() => {
+        const data = getValues();
+        // Transform measurements to match backend expectations for draft saving
+        return {
+            ...data,
+            measurements: data.measurements.map((m: any) => ({
+                pom_name: m.pom_name,
+                tol: m.tol,
+                std: m.std === '' ? null : parseFloat(m.std) || null,
+                samples: (m.samples || []).map((s: any) => ({
+                    index: s.index,
+                    value: s.value === '' ? null : parseFloat(s.value) || null
+                }))
+            }))
+        };
+    }, [getValues]);
     const getImageSlotsForDraft = useCallback(() => {
         // Serialize image slots (store captions only, not File blobs, for local draft)
         return imageSlots.map(s => ({
