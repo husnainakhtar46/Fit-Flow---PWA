@@ -82,3 +82,6 @@ deploy_v2.sh
 deploy_v2.ps1
 
 
+
+# Documentation
+FRONTEND_GUIDELINES.md
