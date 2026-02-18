@@ -11,16 +11,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 import { Plus, Trash2, AlertCircle } from 'lucide-react';
 import { useToast } from './ui/use-toast';
 import { COMMON_DEFECTS } from '../lib/aqlCalculations';
-import { useAutosave } from '../hooks/useAutosave';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
-import { Loader2, Save } from 'lucide-react';
+
+
 import {
   AQLResultCard,
   DefectCounter,
@@ -434,79 +426,9 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     result: 'Pending'
   });
 
-  // Wrapper for sensitive getFormData to include non-RHF state
-  const getFullFormData = useCallback(() => {
-    const data = getValues();
-    return {
-      ...data,
-      _defectCounts: defectCounts,
-      _serverCalcs: serverCalcs,
-    };
-  }, [getValues, defectCounts, serverCalcs]);
 
-  // --- Auto-Save Hook ---
-  const {
-    draftStatus,
-    lastSavedAt,
-    existingDraft,
-    resumeDraft,
-    clearDraft,
-    saveDraftNow,
-    dismissDraft,
-    triggerLocalSave,
-  } = useAutosave({
-    formType: 'final_inspection',
-    draftKey: `final_${getValues('order_no') || 'new'}`,
-    getFormData: getFullFormData,
-    getImageSlots: () => uploadedImages,
-    serverId: inspectionId,
-    enabled: true,
-  });
 
-  // Watch for changes to trigger local save
-  useEffect(() => {
-    const subscription = watch(() => {
-      triggerLocalSave();
-    });
-    return () => subscription.unsubscribe();
-  }, [watch, triggerLocalSave]);
 
-  // Handle Resume Draft
-  const [showResumeDialog, setShowResumeDialog] = useState(false);
-
-  useEffect(() => {
-    if (existingDraft) {
-      setShowResumeDialog(true);
-    }
-  }, [existingDraft]);
-
-  const handleResumeDraft = () => {
-    const draft = resumeDraft();
-    if (draft) {
-      // 1. Reset Form
-      reset(draft.formData);
-
-      // 2. Restore Images
-      if (draft.imageSlots && Array.isArray(draft.imageSlots)) {
-        setUploadedImages(draft.imageSlots.map((img: any) => ({
-          ...img,
-          file: new File([], "draft_image"), // Placeholder
-          previewUrl: img.previewUrl || (img.image?.startsWith('http') ? img.image : `${API_URL}${img.image}`),
-        })));
-      }
-
-      // 3. Restore Defect Counts & Server Calcs
-      if (draft.formData._defectCounts) {
-        setDefectCounts(draft.formData._defectCounts);
-      }
-      if (draft.formData._serverCalcs) {
-        setServerCalcs(draft.formData._serverCalcs);
-      }
-
-      toast({ title: "Draft Resumed", description: "Your previous work has been restored." });
-    }
-    setShowResumeDialog(false);
-  };
 
   // --- API Calculation Hook ---
   const performCalculation = useCallback(async () => {
@@ -1004,7 +926,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
       queryClient.invalidateQueries({ queryKey: ['finalInspections'] });
       queryClient.invalidateQueries({ queryKey: ['finalInspection', inspectionId] });
       toast({ title: 'Final Inspection updated successfully!' });
-      clearDraft(); // Clear draft on success
+
       onClose();
     },
     onError: (error: any) => {
@@ -1109,12 +1031,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     }
   };
 
-  const handleSaveDraft = async () => {
-    // Manual trigger for saving both local and server
-    await saveDraftNow();
-    toast({ title: "Draft Saved", description: "Your progress has been saved locally and to the server." });
-    onClose();
-  };
+
 
   // Prevent Enter key from submitting/closing, except in textareas
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1137,9 +1054,6 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
         <div className="flex justify-between items-center border-b -mx-4 md:-mx-6 lg:-mx-8 px-4 md:px-6 lg:px-8 py-4 mb-4">
           <div className="flex items-center gap-3">
             <h2 className="text-xl md:text-2xl font-bold text-gray-800">{inspectionId ? 'Edit Final Inspection' : 'New Final Inspection'}</h2>
-            {draftStatus === 'saving_local' && <span className="text-xs text-gray-400 flex items-center"><Loader2 className="w-3 h-3 animate-spin mr-1" /> Saving...</span>}
-            {draftStatus === 'saved' && <span className="text-xs text-green-600 flex items-center">Saved</span>}
-            {existingDraft && !inspectionId && <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">Restored Draft</span>}
           </div>
         </div>
 
@@ -1528,10 +1442,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
         {/* Submit Buttons */}
         <div className="flex justify-end gap-4 pt-4 border-t">
-          <Button type="button" variant="ghost" onClick={handleSaveDraft} className="text-gray-600 hover:text-blue-600 hover:bg-blue-50">
-            <Save className="w-4 h-4 mr-2" />
-            Save as Draft
-          </Button>
+
           <Button type="button" variant="outline" onClick={handleCancel} className="w-32">Cancel</Button>
 
           {inspectionId ? (
@@ -1566,21 +1477,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
         </div>
       </form >
 
-      <Dialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Resume Unsaved Draft?</DialogTitle>
-            <DialogDescription>
-              We found an unsaved draft for this inspection{lastSavedAt ? ` from ${lastSavedAt.toLocaleTimeString()}` : ''}.
-              Would you like to resume where you left off?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={dismissDraft}>Discard Draft</Button>
-            <Button onClick={handleResumeDraft}>Resume Draft</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
     </>
   );
 }
