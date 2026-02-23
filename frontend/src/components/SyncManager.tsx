@@ -4,9 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Button } from './ui/button';
 import { CheckCircle, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useToast } from './ui/use-toast';
-import axios from 'axios';
-
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
+import api from '../lib/api';
 
 interface SyncManagerProps {
     /** Which type of offline inspections to sync: 'evaluation' or 'final_inspection' */
@@ -37,8 +35,9 @@ export default function SyncManager({ type }: SyncManagerProps) {
         if (pendingCount === 0 || isSyncing) return;
 
         setIsSyncing(true);
-        const token = localStorage.getItem('access_token');
         const endpoint = getEndpoint();
+        let successCount = 0;
+        let failCount = 0;
 
         try {
             for (const inspection of pendingInspections!) {
@@ -47,11 +46,9 @@ export default function SyncManager({ type }: SyncManagerProps) {
                     let newId = inspection.server_id;
 
                     if (!newId) {
-                        // 1. Upload main record
+                        // 1. Upload main record using authenticated api instance
                         const payload = { ...inspection.formData };
-                        const response = await axios.post(`${API_URL}${endpoint}`, payload, {
-                            headers: { Authorization: `Bearer ${token}` },
-                        });
+                        const response = await api.post(endpoint, payload);
                         newId = response.data.id;
 
                         // Save server_id locally immediately to prevent duplicates on crash
@@ -63,12 +60,12 @@ export default function SyncManager({ type }: SyncManagerProps) {
                     // 2. Upload images
                     for (const img of inspection.images) {
                         const formData = new FormData();
-                        formData.append('image', img.file); // file is now compressed (processed in ImageUploader)
+                        formData.append('image', img.file);
                         formData.append('caption', img.caption);
                         formData.append('category', img.category);
 
-                        await axios.post(`${API_URL}${endpoint}${newId}/upload_image/`, formData, {
-                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
+                        await api.post(`${endpoint}${newId}/upload_image/`, formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' },
                         });
                     }
 
@@ -76,24 +73,37 @@ export default function SyncManager({ type }: SyncManagerProps) {
                     if (inspection.id) {
                         await db.inspections.delete(inspection.id);
                     }
-                } catch (itemError) {
-                    console.error("Failed to sync item", itemError);
-                    // Continue to next item even if one fails
+                    successCount++;
+                } catch (itemError: any) {
+                    failCount++;
+                    const status = itemError?.response?.status;
+                    const detail = itemError?.response?.data?.detail || itemError?.message || 'Unknown error';
+                    console.error(`Failed to sync item (HTTP ${status}):`, detail, itemError);
+
+                    toast({
+                        title: `Sync failed for 1 item`,
+                        description: status === 401
+                            ? 'Session expired. Please log in again.'
+                            : `Error: ${detail}`,
+                        variant: 'destructive',
+                    });
                 }
             }
 
+            if (successCount > 0) {
+                toast({
+                    title: 'Sync Complete',
+                    description: `${successCount} item(s) synced successfully.${failCount > 0 ? ` ${failCount} failed.` : ''}`,
+                });
+                // Refresh list to show newly synced items
+                window.location.reload();
+            }
+        } catch (error: any) {
+            console.error('Sync critical failure:', error);
             toast({
-                title: "Sync Process Finished",
-                description: `Sync attempt complete. Check pending items if any remain.`,
-            });
-            // Force refresh of list
-            window.location.reload();
-        } catch (error) {
-            console.error("Sync critical failure:", error);
-            toast({
-                title: "Sync Failed",
-                description: "Critical error during sync.",
-                variant: "destructive",
+                title: 'Sync Failed',
+                description: 'A critical error occurred during sync. Please try again.',
+                variant: 'destructive',
             });
         } finally {
             setIsSyncing(false);

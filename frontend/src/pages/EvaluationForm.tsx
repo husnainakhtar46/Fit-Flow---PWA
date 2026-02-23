@@ -8,10 +8,10 @@ import { InlineSuggestionDropdown } from '../components/InlineSuggestionDropdown
 import { useStyleLookup } from '../hooks/useStyleLookup';
 import { useAutosave } from '../hooks/useAutosave';
 import { toast } from 'sonner';
-import axios from 'axios';
+
 import api from '../lib/api';
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
+
 import { useAuth } from '../lib/useAuth';
 import { db, cacheCustomers, cacheTemplates, getCachedCustomers, getCachedTemplates, saveDraftLocally } from '../lib/db';
 import { pdf } from '@react-pdf/renderer';
@@ -535,10 +535,7 @@ const EvaluationForm = () => {
         queryKey: ['customers_v2'],
         queryFn: async () => {
             try {
-                const token = localStorage.getItem('access_token');
-                const response = await axios.get(`${API_URL}/customers/`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const response = await api.get('/customers/');
 
                 const data = Array.isArray(response.data) ? response.data : response.data?.results || [];
 
@@ -561,10 +558,7 @@ const EvaluationForm = () => {
         queryKey: ['templates'],
         queryFn: async () => {
             try {
-                const token = localStorage.getItem('access_token');
-                const res = await axios.get(`${API_URL}/templates/`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const res = await api.get('/templates/');
                 const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
                 await cacheTemplates(data);
                 return data;
@@ -957,9 +951,10 @@ const EvaluationForm = () => {
             setIsManualTemplateChange(false);
             toast.success('Evaluation created');
         },
-        onError: (err) => {
-            console.error(err);
-            toast.error('Failed to save');
+        onError: (err: any) => {
+            console.error('Create evaluation failed:', err);
+            const detail = err?.response?.data?.detail || err?.response?.data?.non_field_errors?.[0] || err?.message || 'Unknown error';
+            toast.error(`Failed to save: ${detail}`);
         }
     });
 
@@ -1020,9 +1015,10 @@ const EvaluationForm = () => {
             setIsManualTemplateChange(false);
             toast.success('Evaluation updated');
         },
-        onError: (err) => {
-            console.error(err);
-            toast.error('Failed to update');
+        onError: (err: any) => {
+            console.error('Update evaluation failed:', err);
+            const detail = err?.response?.data?.detail || err?.response?.data?.non_field_errors?.[0] || err?.message || 'Unknown error';
+            toast.error(`Failed to update: ${detail}`);
         }
     });
 
@@ -1106,7 +1102,7 @@ const EvaluationForm = () => {
                         let imageUrl = img.image || null;
                         if (imageUrl && !imageUrl.startsWith('http')) {
                             // Relative URL - prepend API base
-                            imageUrl = `${API_URL}${imageUrl}`;
+                            imageUrl = `${api.defaults.baseURL}${imageUrl}`;
                         }
                         console.log(`Image ${index}:`, imageUrl, 'Caption:', img.caption);
                         loadedImages[index] = {

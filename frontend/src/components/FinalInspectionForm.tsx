@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -31,7 +31,7 @@ import { InlineSuggestionDropdown } from './InlineSuggestionDropdown';
 import { useStyleLookup } from '../hooks/useStyleLookup';
 import api from '../lib/api';
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
+
 
 interface FinalInspectionFormProps {
   inspectionId?: string;
@@ -130,7 +130,6 @@ const INITIAL_FORM_STATE: FormData = {
 export default function FinalInspectionForm({ inspectionId, onClose }: FinalInspectionFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const token = localStorage.getItem('access_token');
 
   const [defectCounts, setDefectCounts] = useState<DefectCounts>(() => {
     const initial: DefectCounts = {};
@@ -182,9 +181,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     queryKey: ['customers'],
     queryFn: async () => {
       try {
-        const response = await axios.get(`${API_URL}/customers/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await api.get('/customers/');
         const data = Array.isArray(response.data) ? response.data : response.data?.results || [];
         // Cache to IndexedDB for offline use
         await cacheCustomers(data);
@@ -204,9 +201,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     queryKey: ['templates'],
     queryFn: async () => {
       try {
-        const response = await axios.get(`${API_URL}/templates/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await api.get('/templates/');
         const data = Array.isArray(response.data) ? response.data : response.data?.results || [];
         // Cache to IndexedDB for offline use
         await cacheTemplates(data);
@@ -226,9 +221,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     queryKey: ['finalInspection', inspectionId],
     queryFn: async () => {
       if (!inspectionId) return null;
-      const response = await axios.get(`${API_URL}/final-inspections/${inspectionId}/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await api.get(`/final-inspections/${inspectionId}/`);
       return response.data;
     },
     enabled: !!inspectionId,
@@ -315,7 +308,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
       if (inspectionData.images) {
         setUploadedImages(inspectionData.images.map((img: { image: string; caption: string; category: string; id: string }) => ({
           file: new File([], "existing_image"), // Placeholder
-          previewUrl: img.image.startsWith('http') ? img.image : `${API_URL}${img.image}`, // Fix URL
+          previewUrl: img.image.startsWith('http') ? img.image : `${api.defaults.baseURL}${img.image}`, // Fix URL
           caption: img.caption,
           category: img.category,
           id: img.id,
@@ -435,16 +428,15 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     if (!presentedQty) return;
 
     try {
-      const response = await axios.post(
-        `${API_URL}/final-inspections/calculate_aql/`,
+      const response = await api.post(
+        '/final-inspections/calculate_aql/',
         {
           qty: presentedQty,
           standard: aqlStandard,
           critical: critical,
           major: major,
           minor: minor
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
+        }
       );
 
       const data = response.data;
@@ -464,7 +456,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     } catch (error) {
       console.error("Calculation failed", error);
     }
-  }, [presentedQty, aqlStandard, critical, major, minor, token, setValue]);
+  }, [presentedQty, aqlStandard, critical, major, minor, setValue]);
 
   // --- Trigger Calculation ---
   // Debounce to avoid spamming server while typing
@@ -846,9 +838,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
       const payload = { ...data, defects, measurements };
 
       // 2. Create Inspection Record
-      const response = await axios.post(`${API_URL}/final-inspections/`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await api.post('/final-inspections/', payload);
 
       // 3. Upload images
       for (const img of uploadedImages) {
@@ -858,8 +848,8 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
         formData.append('caption', img.caption);
         formData.append('category', img.category);
 
-        await axios.post(`${API_URL}/final-inspections/${response.data.id}/upload_image/`, formData, {
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
+        await api.post(`/final-inspections/${response.data.id}/upload_image/`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
       }
 
@@ -871,8 +861,9 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
       onClose();
     },
     onError: (error: any) => {
-      console.error(error);
-      toast({ title: 'Failed to create report', description: error.message, variant: 'destructive' });
+      console.error('Create final inspection failed:', error);
+      const detail = error?.response?.data?.detail || error?.response?.data?.non_field_errors?.[0] || error?.message || 'Unknown error';
+      toast({ title: 'Failed to create report', description: detail, variant: 'destructive' });
     },
   });
 
@@ -902,9 +893,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
       const payload = { ...data, defects, measurements };
       if ('images' in payload) delete (payload as any).images; // Prevent overwriting images
 
-      const response = await axios.put(`${API_URL}/final-inspections/${id}/`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await api.put(`/final-inspections/${id}/`, payload);
 
       // 3. Upload NEW images only
       for (const img of uploadedImages) {
@@ -915,8 +904,8 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
         formData.append('caption', img.caption);
         formData.append('category', img.category);
 
-        await axios.post(`${API_URL}/final-inspections/${id}/upload_image/`, formData, {
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
+        await api.post(`/final-inspections/${id}/upload_image/`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
       }
 
@@ -930,8 +919,9 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
       onClose();
     },
     onError: (error: any) => {
-      console.error(error);
-      toast({ title: 'Failed to update report', description: error.message, variant: 'destructive' });
+      console.error('Update final inspection failed:', error);
+      const detail = error?.response?.data?.detail || error?.response?.data?.non_field_errors?.[0] || error?.message || 'Unknown error';
+      toast({ title: 'Failed to update report', description: detail, variant: 'destructive' });
     },
   });
 
