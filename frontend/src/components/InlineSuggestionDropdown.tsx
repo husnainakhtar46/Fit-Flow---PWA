@@ -98,7 +98,7 @@ export const InlineSuggestionDropdown = ({
     return (
         <div
             ref={dropdownRef}
-            className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
+            className="absolute z-[120] w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto"
         >
             <ul className="py-1">
                 {suggestions.slice(0, 6).map((suggestion, index) => (
@@ -107,8 +107,8 @@ export const InlineSuggestionDropdown = ({
                         onClick={() => onSelect(suggestion)}
                         onMouseEnter={() => setSelectedIndex(index)}
                         className={`px-3 py-2 cursor-pointer text-sm transition-colors ${index === selectedIndex
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'hover:bg-gray-50 text-gray-700'
+                            ? 'bg-blue-50 text-blue-700'
+                            : 'hover:bg-gray-50 text-gray-700'
                             }`}
                     >
                         {suggestion}

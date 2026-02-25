@@ -1407,11 +1407,11 @@ const EvaluationForm = () => {
                                 <Button><Plus className="w-4 h-4 mr-2" />New Evaluation</Button>
                             </DialogTrigger>
                         )}
-                        <DialogContent className="fixed inset-0 z-50 flex flex-col bg-white max-w-none !rounded-none p-0 m-0 border-none shadow-none !translate-x-0 !translate-y-0">
+                        <DialogContent className="fixed inset-0 z-[110] flex flex-col bg-white max-w-none !rounded-none p-0 m-0 border-none shadow-none !translate-x-0 !translate-y-0">
                             <DialogDescription className="sr-only">
                                 Full screen evaluation form
                             </DialogDescription>
-                            <DialogHeader className="p-4 border-b shrink-0">
+                            <DialogHeader className="p-4 pr-14 border-b shrink-0">
                                 <div className="flex items-center justify-between">
                                     <DialogTitle>Evaluation</DialogTitle>
                                     {/* Draft Status Indicator */}
