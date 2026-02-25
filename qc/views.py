@@ -42,6 +42,9 @@ class InspectionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Inspection.objects.select_related('customer', 'template', 'created_by').order_by("-created_at")
+        # Exclude drafts from the main list (they have their own endpoint)
+        if self.action == 'list':
+            queryset = queryset.filter(is_draft=False)
         if self.action != 'list' or self.action == 'retrieve':
             queryset = queryset.prefetch_related(
                 'measurements', 
@@ -63,8 +66,19 @@ class InspectionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def pdf(self, request, pk=None):
         inspection = self.get_object()
+        if inspection.is_draft:
+            return Response({"error": "Cannot generate PDF for a draft inspection."}, status=status.HTTP_400_BAD_REQUEST)
         buffer = generate_pdf_buffer(inspection)
         return FileResponse(buffer, filename=f"{inspection.style}_Report.pdf", content_type="application/pdf")
+
+    @action(detail=False, methods=["get"])
+    def drafts(self, request):
+        """Return only the current user's draft inspections."""
+        drafts = Inspection.objects.filter(
+            is_draft=True, created_by=request.user
+        ).select_related('customer', 'template', 'created_by').order_by('-updated_at')
+        serializer = InspectionListSerializer(drafts, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
     def upload_image(self, request, pk=None):
@@ -100,6 +114,10 @@ class InspectionViewSet(viewsets.ModelViewSet):
             
         if not to_emails:
              return Response({"error": "No 'To' recipients found. Add at least one 'To' email to the Customer first."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Block email for draft inspections
+        if inspection.is_draft:
+            return Response({"error": "Cannot send email for a draft inspection. Please finalize it first."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Updated Subject and Body
         date_str = inspection.created_at.strftime('%Y-%m-%d')
@@ -370,6 +388,10 @@ class FinalInspectionViewSet(viewsets.ModelViewSet):
         if self.action in ['retrieve', 'update', 'partial_update']:
             queryset = queryset.prefetch_related('defects', 'size_checks', 'images')
         
+        # Filter out drafts from the main list (they have their own endpoint)
+        if self.action == 'list':
+            queryset = queryset.filter(is_draft=False)
+
         # Filter by query params
         customer_id = self.request.query_params.get('customer')
         if customer_id:
@@ -426,6 +448,15 @@ class FinalInspectionViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["get"])
+    def drafts(self, request):
+        """Return only the current user's draft final inspections."""
+        drafts = FinalInspection.objects.filter(
+            is_draft=True, created_by=request.user
+        ).select_related('customer', 'created_by').order_by('-updated_at')
+        serializer = FinalInspectionListSerializer(drafts, many=True)
+        return Response(serializer.data)
     
     @action(detail=False, methods=['post'])
     def calculate_aql(self, request):
