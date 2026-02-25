@@ -31,6 +31,7 @@ import {
     DialogDescription,
 } from '../components/ui/dialog';
 import { Card } from '../components/ui/card';
+import Pagination from '../components/Pagination';
 
 // Types
 interface StyleLink {
@@ -89,6 +90,7 @@ const SAMPLE_NUMBERS = [
 const StyleCycle = () => {
     const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
     const [selectedStyle, setSelectedStyle] = useState<StyleMaster | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false); // New state for edit dialog
@@ -134,16 +136,24 @@ const StyleCycle = () => {
     const customers = Array.isArray(customersData) ? customersData : [];
 
     // Fetch styles list
-    const { data: stylesData, isLoading } = useQuery({
-        queryKey: ['styles', search],
+    const { data: stylesData, isLoading, isPlaceholderData } = useQuery({
+        queryKey: ['styles', search, page],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (search) params.append('search', search);
+            params.append('page', page.toString());
+            params.append('page_size', '20');
             const res = await api.get(`/styles/?${params.toString()}`);
-            return res.data.results || res.data || [];
+            return res.data;
         },
+        placeholderData: (previousData) => previousData,
     });
-    const styles = Array.isArray(stylesData) ? stylesData : [];
+
+    // Extract pagination lists
+    const styles = stylesData?.results || (Array.isArray(stylesData) ? stylesData : []);
+    const totalCount = stylesData?.count;
+    const hasNext = !!stylesData?.next;
+    const hasPrevious = !!stylesData?.previous;
 
     // Fetch single style details
     const { data: styleDetails, refetch: refetchDetails } = useQuery({
@@ -355,7 +365,10 @@ const StyleCycle = () => {
                     <Input
                         placeholder="Search by PO, Style, Customer..."
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(e) => {
+                            setSearch(e.target.value);
+                            setPage(1); // Reset page on new search
+                        }}
                         className="pl-10"
                     />
                 </div>
@@ -415,6 +428,19 @@ const StyleCycle = () => {
                         </TableBody>
                     </Table>
                 </Card>
+
+                {/* Pagination */}
+                {!isLoading && styles.length > 0 && (
+                    <Pagination
+                        page={page}
+                        hasNext={hasNext}
+                        hasPrevious={hasPrevious}
+                        onPageChange={setPage}
+                        isLoading={isPlaceholderData}
+                        totalCount={totalCount}
+                        pageSize={20}
+                    />
+                )}
 
                 {/* Create Style Dialog */}
                 <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
