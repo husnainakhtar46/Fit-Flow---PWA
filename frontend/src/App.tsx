@@ -11,7 +11,6 @@ import CustomerFeedback from './pages/CustomerFeedback';
 import FinalInspections from './pages/FinalInspections';
 import StyleCycle from './pages/StyleCycle';
 import Sidebar from './components/Sidebar';
-import MobileNav from './components/MobileNav';
 import MobileHeader from './components/MobileHeader';
 import MobileSidebar from './components/MobileSidebar';
 import Resources from './pages/Resources';
@@ -54,12 +53,9 @@ const Layout = () => {
             />
 
             {/* Main Content */}
-            <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 pb-20 md:pt-8 md:pb-8 relative z-10">
+            <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 pb-8 md:pt-8 md:pb-8 relative z-10">
                 <Outlet />
             </main>
-
-            {/* Mobile Bottom Nav */}
-            <MobileNav />
         </div>
     );
 };
