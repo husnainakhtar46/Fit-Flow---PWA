@@ -1,11 +1,25 @@
 import { Toaster as Sonner } from "sonner"
+import { useEffect, useState } from "react"
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 const Toaster = ({ ...props }: ToasterProps) => {
+    const [position, setPosition] = useState<"bottom-right" | "top-center">("bottom-right")
+
+    useEffect(() => {
+        const checkMobile = () => {
+            setPosition(window.innerWidth < 768 ? "top-center" : "bottom-right")
+        }
+
+        checkMobile()
+        window.addEventListener("resize", checkMobile)
+        return () => window.removeEventListener("resize", checkMobile)
+    }, [])
+
     return (
         <Sonner
             className="toaster group"
+            position={position}
             toastOptions={{
                 classNames: {
                     toast:
