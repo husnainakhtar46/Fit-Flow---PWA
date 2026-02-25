@@ -33,7 +33,10 @@ import {
 import { Card } from '../components/ui/card';
 import Pagination from '../components/Pagination';
 
-// Types
+// ==========================================
+// TypeScript Interfaces & Types
+// ==========================================
+
 interface StyleLink {
     id?: string;
     label: string;
@@ -71,6 +74,9 @@ interface StyleMaster {
     comments_count?: number;
 }
 
+// ==========================================
+// Constants
+// ==========================================
 const SAMPLE_TYPES = [
     'Fit Sample',
     'PP Sample',
@@ -89,18 +95,25 @@ const SAMPLE_NUMBERS = [
 
 const StyleCycle = () => {
     const queryClient = useQueryClient();
+
+    // UI State Management
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [selectedStyle, setSelectedStyle] = useState<StyleMaster | null>(null);
+    const [activeTab, setActiveTab] = useState('Fit Sample');
+
+    // Modal & Dialog States
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false); // New state for edit dialog
-    const [activeTab, setActiveTab] = useState('Fit Sample');
     const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
+
+    // Form & Comment States
     const [newLink, setNewLink] = useState({ label: '', url: '' });
     const [editingComment, setEditingComment] = useState<SampleComment | null>(null);
     const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
 
-    // Check user role
+    // Role-Based Access Control (RBAC) Check Validate
+    // QA roles are restricted from editing directly unless they are superusers.
     const userType = localStorage.getItem('user_type');
     const isSuperUser = localStorage.getItem('is_superuser') === 'true';
     const canEdit = userType !== 'qa' || isSuperUser;
@@ -115,7 +128,11 @@ const StyleCycle = () => {
         factory: '',
     });
 
-    // Fetch factories
+    // ==========================================
+    // API Data Fetching (Queries)
+    // ==========================================
+
+    // Fetch dropdown options for factories
     const { data: factoriesData } = useQuery({
         queryKey: ['factories'],
         queryFn: async () => {
@@ -125,7 +142,7 @@ const StyleCycle = () => {
     });
     const factories = Array.isArray(factoriesData) ? factoriesData : [];
 
-    // Fetch customers
+    // Fetch dropdown options for customers
     const { data: customersData } = useQuery({
         queryKey: ['customers'],
         queryFn: async () => {
@@ -135,21 +152,21 @@ const StyleCycle = () => {
     });
     const customers = Array.isArray(customersData) ? customersData : [];
 
-    // Fetch styles list
+    // Main Styles Grid Data - List API Call with Pagination & Search
     const { data: stylesData, isLoading, isPlaceholderData } = useQuery({
         queryKey: ['styles', search, page],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (search) params.append('search', search);
             params.append('page', page.toString());
-            params.append('page_size', '20');
+            params.append('page_size', '20'); // Force 20 items per page max
             const res = await api.get(`/styles/?${params.toString()}`);
             return res.data;
         },
-        placeholderData: (previousData) => previousData,
+        placeholderData: (previousData) => previousData, // Keeps previous list UI visible while fetching new page
     });
 
-    // Extract pagination lists
+    // Extract pagination metadata from backend response
     const styles = stylesData?.results || (Array.isArray(stylesData) ? stylesData : []);
     const totalCount = stylesData?.count;
     const hasNext = !!stylesData?.next;
@@ -166,15 +183,19 @@ const StyleCycle = () => {
         enabled: !!selectedStyle?.id,
     });
 
-    // Update style mutation
+    // ==========================================
+    // Data Mutation Functions (Create/Edit/Delete)
+    // ==========================================
+
+    // Update existing style's data headers
     const updateStyleMutation = useMutation({
         mutationFn: async (data: typeof newStyle & { id: string }) => {
             const { id, ...updateData } = data;
             return api.patch(`/styles/${id}/`, updateData);
         },
         onSuccess: (res) => {
-            queryClient.invalidateQueries({ queryKey: ['styles'] });
-            queryClient.invalidateQueries({ queryKey: ['style', res.data.id] });
+            queryClient.invalidateQueries({ queryKey: ['styles'] }); // Refresh list view
+            queryClient.invalidateQueries({ queryKey: ['style', res.data.id] }); // Refresh detail view
             setSelectedStyle(res.data);
             setIsEditOpen(false);
             toast.success('Style updated successfully');
@@ -184,7 +205,7 @@ const StyleCycle = () => {
         },
     });
 
-    // Create style mutation
+    // Create a new style record
     const createStyleMutation = useMutation({
         mutationFn: async (data: typeof newStyle) => {
             return api.post('/styles/', data);
@@ -193,8 +214,7 @@ const StyleCycle = () => {
             queryClient.invalidateQueries({ queryKey: ['styles'] });
             setIsCreateOpen(false);
             setSelectedStyle(res.data);
-            setIsCreateOpen(false);
-            setSelectedStyle(res.data);
+            // Reset form
             setNewStyle({ po_number: '', style_name: '', color: '', season: '', customer: '', factory: '' });
             toast.success('Style created successfully');
         },
@@ -203,14 +223,13 @@ const StyleCycle = () => {
         },
     });
 
-    // Delete style mutation
     const deleteStyleMutation = useMutation({
         mutationFn: async (id: string) => {
             return api.delete(`/styles/${id}/`);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['styles'] });
-            setSelectedStyle(null);
+            setSelectedStyle(null); // Return to list view
             toast.success('Style deleted');
         },
         onError: () => {
@@ -218,18 +237,20 @@ const StyleCycle = () => {
         },
     });
 
-    // Add/Update comment mutation
+    // Submits new or edited feedback comments for a specific sample dropdown
     const saveCommentMutation = useMutation({
         mutationFn: async (data: { styleId: string; comment: SampleComment }) => {
             if (data.comment.id) {
+                // If it exists, patch it
                 return api.patch(`/sample-comments/${data.comment.id}/`, data.comment);
             } else {
+                // Otherwise attach to the specified Style ID via child POST url
                 return api.post(`/styles/${data.styleId}/add_comment/`, data.comment);
             }
         },
         onSuccess: () => {
             refetchDetails();
-            setEditingComment(null);
+            setEditingComment(null); // Return out of edit mode
             toast.success('Comment saved');
         },
         onError: () => {
@@ -237,7 +258,6 @@ const StyleCycle = () => {
         },
     });
 
-    // Delete comment mutation
     const deleteCommentMutation = useMutation({
         mutationFn: async (id: string) => {
             return api.delete(`/sample-comments/${id}/`);
@@ -248,7 +268,7 @@ const StyleCycle = () => {
         },
     });
 
-    // Add link mutation
+    // Adding hyperlinks (e.g. PDF documents, emails) tied to the style record
     const addLinkMutation = useMutation({
         mutationFn: async (data: { styleId: string; link: StyleLink }) => {
             return api.post(`/styles/${data.styleId}/add_link/`, data.link);
@@ -256,7 +276,7 @@ const StyleCycle = () => {
         onSuccess: () => {
             refetchDetails();
             setIsLinkDialogOpen(false);
-            setNewLink({ label: '', url: '' });
+            setNewLink({ label: '', url: '' }); // Clear field
             toast.success('Link added');
         },
         onError: () => {
@@ -264,7 +284,6 @@ const StyleCycle = () => {
         },
     });
 
-    // Delete link mutation
     const deleteLinkMutation = useMutation({
         mutationFn: async (id: string) => {
             return api.delete(`/style-links/${id}/`);
@@ -275,7 +294,11 @@ const StyleCycle = () => {
         },
     });
 
-    // Get comments for active tab (sorted by sample_number descending)
+    // ==========================================
+    // Helper Methods & Event Handlers
+    // ==========================================
+
+    // Get comments assigned strictly to the currently visible horizontal "Sample Type" tab
     const getCommentsForTab = (): SampleComment[] => {
         if (!styleDetails?.comments) return [];
         return styleDetails.comments
@@ -299,7 +322,7 @@ const StyleCycle = () => {
 
     const handleCreateComment = () => {
         const usedNumbers = getUsedSampleNumbers();
-        // Find next available sample number
+        // Dynamically find the next available sample number (from 1 to 5)
         let nextNumber = 1;
         for (let i = 1; i <= 5; i++) {
             if (!usedNumbers.includes(i)) {
@@ -345,7 +368,9 @@ const StyleCycle = () => {
         });
     };
 
-    // List View
+    // ==========================================
+    // VIEW 1: Main Data Grid (List of Styles)
+    // ==========================================
     if (!selectedStyle) {
         return (
             <div className="space-y-6">
@@ -522,7 +547,9 @@ const StyleCycle = () => {
         );
     }
 
-    // Detail View
+    // ==========================================
+    // VIEW 2: Detail Overlay (Drill-Down per Style)
+    // ==========================================
     const tabComments = getCommentsForTab();
     const usedSampleNumbers = getUsedSampleNumbers();
 
