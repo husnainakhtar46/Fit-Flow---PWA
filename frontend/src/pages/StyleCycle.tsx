@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Trash2, Search, ExternalLink, Edit2, ChevronLeft, X, Save, Link as LinkIcon, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../lib/api';
+import CommentImageTiles, { type CommentImage } from '../components/CommentImageTiles';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -54,9 +55,20 @@ interface SampleComment {
     comments_wash: string;
     comments_fabric: string;
     comments_accessories: string;
+    images?: CommentImage[];
     created_at?: string;
     updated_at?: string;
 }
+
+/** Category keys matching backend choices */
+type ImageCategory = 'general' | 'fit' | 'workmanship' | 'wash' | 'fabric' | 'accessories';
+
+/** Map of pending files per category (not yet uploaded) */
+type PendingImagesMap = Record<ImageCategory, File[]>;
+
+const EMPTY_PENDING: PendingImagesMap = {
+    general: [], fit: [], workmanship: [], wash: [], fabric: [], accessories: [],
+};
 
 interface StyleMaster {
     id: string;
@@ -111,6 +123,7 @@ const StyleCycle = () => {
     const [newLink, setNewLink] = useState({ label: '', url: '' });
     const [editingComment, setEditingComment] = useState<SampleComment | null>(null);
     const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+    const [pendingImages, setPendingImages] = useState<PendingImagesMap>({ ...EMPTY_PENDING });
 
     // Role-Based Access Control (RBAC) Check Validate
     // QA roles are restricted from editing directly unless they are superusers.
@@ -248,7 +261,16 @@ const StyleCycle = () => {
                 return api.post(`/styles/${data.styleId}/add_comment/`, data.comment);
             }
         },
-        onSuccess: () => {
+        onSuccess: async (res) => {
+            // Upload any pending images for the saved comment
+            const savedCommentId = res.data?.id;
+            if (savedCommentId) {
+                const hasPending = Object.values(pendingImages).some(f => f.length > 0);
+                if (hasPending) {
+                    await uploadPendingImages(savedCommentId);
+                }
+            }
+            setPendingImages({ ...EMPTY_PENDING });
             refetchDetails();
             setEditingComment(null); // Return out of edit mode
             toast.success('Comment saved');
@@ -342,10 +364,59 @@ const StyleCycle = () => {
             comments_accessories: '',
         };
         setEditingComment(newComment);
+        setPendingImages({ ...EMPTY_PENDING });
     };
 
     const handleEditComment = (comment: SampleComment) => {
         setEditingComment({ ...comment });
+        setPendingImages({ ...EMPTY_PENDING });
+    };
+
+    /** Upload pending images for a specific comment after it has been saved */
+    const uploadPendingImages = async (commentId: string) => {
+        for (const category of Object.keys(pendingImages) as ImageCategory[]) {
+            const files = pendingImages[category];
+            if (files.length === 0) continue;
+
+            const formData = new FormData();
+            files.forEach(f => formData.append('images', f));
+            formData.append('category', category);
+
+            try {
+                await api.post(`/sample-comments/${commentId}/upload_images/`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+            } catch {
+                toast.error(`Failed to upload ${category} images`);
+            }
+        }
+    };
+
+    /** Add files to the pending map for a given category */
+    const handlePendingAdd = (category: ImageCategory, files: File[]) => {
+        setPendingImages(prev => ({
+            ...prev,
+            [category]: [...prev[category], ...files],
+        }));
+    };
+
+    /** Remove a pending file by index for a given category */
+    const handlePendingRemove = (category: ImageCategory, index: number) => {
+        setPendingImages(prev => ({
+            ...prev,
+            [category]: prev[category].filter((_, i) => i !== index),
+        }));
+    };
+
+    /** Delete an existing image from the backend */
+    const handleExistingImageRemove = async (imageId: string) => {
+        try {
+            await api.delete(`/sample-comment-images/${imageId}/`);
+            refetchDetails();
+            toast.success('Image deleted');
+        } catch {
+            toast.error('Failed to delete image');
+        }
     };
 
     const handleSaveComment = () => {
@@ -692,6 +763,14 @@ const StyleCycle = () => {
                                     placeholder="General customer feedback..."
                                     rows={3}
                                 />
+                                <CommentImageTiles
+                                    images={(editingComment.images || []).filter(i => i.category === 'general')}
+                                    pendingFiles={pendingImages.general}
+                                    onFilesSelected={(f) => handlePendingAdd('general', f)}
+                                    onRemovePending={(i) => handlePendingRemove('general', i)}
+                                    onRemoveExisting={handleExistingImageRemove}
+                                    editable={true}
+                                />
                             </div>
                             <div>
                                 <Label>Customer Fit Comments</Label>
@@ -702,6 +781,14 @@ const StyleCycle = () => {
                                     }
                                     placeholder="Fit-related feedback..."
                                     rows={3}
+                                />
+                                <CommentImageTiles
+                                    images={(editingComment.images || []).filter(i => i.category === 'fit')}
+                                    pendingFiles={pendingImages.fit}
+                                    onFilesSelected={(f) => handlePendingAdd('fit', f)}
+                                    onRemovePending={(i) => handlePendingRemove('fit', i)}
+                                    onRemoveExisting={handleExistingImageRemove}
+                                    editable={true}
                                 />
                             </div>
                             <div>
@@ -714,6 +801,14 @@ const StyleCycle = () => {
                                     placeholder="Workmanship feedback..."
                                     rows={3}
                                 />
+                                <CommentImageTiles
+                                    images={(editingComment.images || []).filter(i => i.category === 'workmanship')}
+                                    pendingFiles={pendingImages.workmanship}
+                                    onFilesSelected={(f) => handlePendingAdd('workmanship', f)}
+                                    onRemovePending={(i) => handlePendingRemove('workmanship', i)}
+                                    onRemoveExisting={handleExistingImageRemove}
+                                    editable={true}
+                                />
                             </div>
                             <div>
                                 <Label>Customer Wash Comments</Label>
@@ -724,6 +819,14 @@ const StyleCycle = () => {
                                     }
                                     placeholder="Wash-related feedback..."
                                     rows={3}
+                                />
+                                <CommentImageTiles
+                                    images={(editingComment.images || []).filter(i => i.category === 'wash')}
+                                    pendingFiles={pendingImages.wash}
+                                    onFilesSelected={(f) => handlePendingAdd('wash', f)}
+                                    onRemovePending={(i) => handlePendingRemove('wash', i)}
+                                    onRemoveExisting={handleExistingImageRemove}
+                                    editable={true}
                                 />
                             </div>
                             <div>
@@ -736,6 +839,14 @@ const StyleCycle = () => {
                                     placeholder="Fabric feedback..."
                                     rows={3}
                                 />
+                                <CommentImageTiles
+                                    images={(editingComment.images || []).filter(i => i.category === 'fabric')}
+                                    pendingFiles={pendingImages.fabric}
+                                    onFilesSelected={(f) => handlePendingAdd('fabric', f)}
+                                    onRemovePending={(i) => handlePendingRemove('fabric', i)}
+                                    onRemoveExisting={handleExistingImageRemove}
+                                    editable={true}
+                                />
                             </div>
                             <div>
                                 <Label>Customer Accessories Comments</Label>
@@ -746,6 +857,14 @@ const StyleCycle = () => {
                                     }
                                     placeholder="Accessories feedback..."
                                     rows={3}
+                                />
+                                <CommentImageTiles
+                                    images={(editingComment.images || []).filter(i => i.category === 'accessories')}
+                                    pendingFiles={pendingImages.accessories}
+                                    onFilesSelected={(f) => handlePendingAdd('accessories', f)}
+                                    onRemovePending={(i) => handlePendingRemove('accessories', i)}
+                                    onRemoveExisting={handleExistingImageRemove}
+                                    editable={true}
                                 />
                             </div>
                             <div className="flex justify-end gap-2 pt-4 border-t">
@@ -815,6 +934,7 @@ const StyleCycle = () => {
                                                         {
                                                             label: 'General Feedback',
                                                             value: comment.comments_general,
+                                                            category: 'general' as ImageCategory,
                                                             color: 'text-blue-600',
                                                             bg: 'bg-blue-50',
                                                             border: 'border-blue-100'
@@ -822,6 +942,7 @@ const StyleCycle = () => {
                                                         {
                                                             label: 'Fit Comments',
                                                             value: comment.comments_fit,
+                                                            category: 'fit' as ImageCategory,
                                                             color: 'text-indigo-600',
                                                             bg: 'bg-indigo-50',
                                                             border: 'border-indigo-100'
@@ -829,6 +950,7 @@ const StyleCycle = () => {
                                                         {
                                                             label: 'Workmanship',
                                                             value: comment.comments_workmanship,
+                                                            category: 'workmanship' as ImageCategory,
                                                             color: 'text-amber-600',
                                                             bg: 'bg-amber-50',
                                                             border: 'border-amber-100'
@@ -836,6 +958,7 @@ const StyleCycle = () => {
                                                         {
                                                             label: 'Wash Comments',
                                                             value: comment.comments_wash,
+                                                            category: 'wash' as ImageCategory,
                                                             color: 'text-cyan-600',
                                                             bg: 'bg-cyan-50',
                                                             border: 'border-cyan-100'
@@ -843,6 +966,7 @@ const StyleCycle = () => {
                                                         {
                                                             label: 'Fabric Comments',
                                                             value: comment.comments_fabric,
+                                                            category: 'fabric' as ImageCategory,
                                                             color: 'text-purple-600',
                                                             bg: 'bg-purple-50',
                                                             border: 'border-purple-100'
@@ -850,12 +974,16 @@ const StyleCycle = () => {
                                                         {
                                                             label: 'Accessories',
                                                             value: comment.comments_accessories,
+                                                            category: 'accessories' as ImageCategory,
                                                             color: 'text-rose-600',
                                                             bg: 'bg-rose-50',
                                                             border: 'border-rose-100'
                                                         },
-                                                    ].map((item) => (
-                                                        item.value && (
+                                                    ].map((item) => {
+                                                        const categoryImages = (comment.images || []).filter(i => i.category === item.category);
+                                                        // Show category if it has text OR images
+                                                        if (!item.value && categoryImages.length === 0) return null;
+                                                        return (
                                                             <div key={item.label} className={`rounded-xl border ${item.border} ${item.bg} overflow-hidden`}>
                                                                 <div className="px-4 py-2 border-b border-black/5 flex items-center gap-2">
                                                                     <h4 className={`font-semibold text-sm ${item.color}`}>
@@ -863,13 +991,25 @@ const StyleCycle = () => {
                                                                     </h4>
                                                                 </div>
                                                                 <div className="p-4 bg-white/50">
-                                                                    <p className="text-gray-800 leading-relaxed whitespace-pre-wrap text-[15px]">
-                                                                        {item.value}
-                                                                    </p>
+                                                                    {item.value && (
+                                                                        <p className="text-gray-800 leading-relaxed whitespace-pre-wrap text-[15px]">
+                                                                            {item.value}
+                                                                        </p>
+                                                                    )}
+                                                                    {categoryImages.length > 0 && (
+                                                                        <CommentImageTiles
+                                                                            images={categoryImages}
+                                                                            pendingFiles={[]}
+                                                                            onFilesSelected={() => { }}
+                                                                            onRemovePending={() => { }}
+                                                                            onRemoveExisting={() => { }}
+                                                                            editable={false}
+                                                                        />
+                                                                    )}
                                                                 </div>
                                                             </div>
-                                                        )
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                                 {canEdit && (
                                                     <div className="flex justify-end pt-2 border-t">

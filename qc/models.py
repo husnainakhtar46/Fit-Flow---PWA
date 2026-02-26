@@ -702,6 +702,36 @@ class SampleComment(models.Model):
         return f"{self.style.po_number} - {self.sample_type} ({self.get_sample_number_display()})"
 
 
+class SampleCommentImage(models.Model):
+    """
+    Images attached to a sample comment, tagged by feedback category.
+    Displayed as inline thumbnail tiles under the respective category card.
+    """
+    CATEGORY_CHOICES = [
+        ('general', 'General'),
+        ('fit', 'Fit'),
+        ('workmanship', 'Workmanship'),
+        ('wash', 'Wash'),
+        ('fabric', 'Fabric'),
+        ('accessories', 'Accessories'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    comment = models.ForeignKey(SampleComment, related_name='images', on_delete=models.CASCADE)
+    image = models.ImageField(upload_to='sample_comment_images/')
+    caption = models.CharField(max_length=255, blank=True, default='')
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='general')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at']
+        verbose_name = "Sample Comment Image"
+        verbose_name_plural = "Sample Comment Images"
+
+    def __str__(self):
+        return f"{self.comment} - {self.get_category_display()} - {self.caption or 'Image'}"
+
+
 class StyleLink(models.Model):
     """
     Related links and documents for a Style (e.g., spec sheets, approval emails).

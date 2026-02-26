@@ -522,10 +522,10 @@ class FinalInspectionViewSet(viewsets.ModelViewSet):
 
 # ==================== Style Cycle ViewSet ====================
 
-from .models import StyleMaster, SampleComment, StyleLink
+from .models import StyleMaster, SampleComment, SampleCommentImage, StyleLink
 from .serializers import (
     StyleMasterSerializer, StyleMasterListSerializer, 
-    SampleCommentSerializer, StyleLinkSerializer
+    SampleCommentSerializer, SampleCommentImageSerializer, StyleLinkSerializer
 )
 
 
@@ -695,6 +695,47 @@ class SampleCommentViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def upload_images(self, request, pk=None):
+        """Upload one or more images to a sample comment (compressed to WebP)."""
+        comment = self.get_object()
+        files = request.FILES.getlist('images')
+        category = request.data.get('category', 'general')
+        caption = request.data.get('caption', '')
+
+        if not files:
+            return Response({'error': 'No images provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        created = []
+        for f in files:
+            try:
+                compressed_file, _ = process_and_compress_image(f)
+                img = SampleCommentImage.objects.create(
+                    comment=comment,
+                    image=compressed_file,
+                    caption=caption,
+                    category=category,
+                )
+                created.append(SampleCommentImageSerializer(img).data)
+            except ValueError as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(created, status=status.HTTP_201_CREATED)
+
+
+class SampleCommentImageViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing individual sample comment images (primarily for deletion)."""
+    queryset = SampleCommentImage.objects.all()
+    serializer_class = SampleCommentImageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = SampleCommentImage.objects.select_related('comment').order_by('uploaded_at')
+        comment_id = self.request.query_params.get('comment')
+        if comment_id:
+            queryset = queryset.filter(comment_id=comment_id)
+        return queryset
 
 
 class StyleLinkViewSet(viewsets.ModelViewSet):

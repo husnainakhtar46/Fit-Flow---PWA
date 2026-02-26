@@ -4,7 +4,7 @@ from .models import (
     Customer, CustomerEmail, Template, TemplatePOM, Inspection, Measurement, MeasurementSample, InspectionImage, FilterPreset,
     FinalInspection, FinalInspectionDefect, FinalInspectionSizeCheck, FinalInspectionImage,
     FinalInspectionMeasurement, FinalInspectionMeasurementSample,
-    StyleMaster, SampleComment, StyleLink, Factory
+    StyleMaster, SampleComment, SampleCommentImage, StyleLink, Factory
 )
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
@@ -382,10 +382,19 @@ class StyleLinkSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
 
+class SampleCommentImageSerializer(serializers.ModelSerializer):
+    """Serializer for sample comment images (inline attachment tiles)."""
+    class Meta:
+        model = SampleCommentImage
+        fields = ['id', 'image', 'caption', 'category', 'uploaded_at']
+        read_only_fields = ['id', 'uploaded_at']
+
+
 class SampleCommentSerializer(serializers.ModelSerializer):
     """Serializer for sample comments by type."""
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
     sample_number_display = serializers.CharField(source='get_sample_number_display', read_only=True)
+    images = SampleCommentImageSerializer(many=True, read_only=True)
     
     class Meta:
         model = SampleComment
@@ -393,6 +402,7 @@ class SampleCommentSerializer(serializers.ModelSerializer):
             'id', 'sample_type', 'sample_number', 'sample_number_display',
             'comments_general', 'comments_fit', 'comments_workmanship',
             'comments_wash', 'comments_fabric', 'comments_accessories',
+            'images',
             'created_at', 'updated_at', 'created_by_username'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by_username', 'sample_number_display']

@@ -5,7 +5,7 @@ from django.urls import path, include
 from qc.views import (
     CustomerViewSet, TemplateViewSet, InspectionViewSet, DashboardView, 
     CustomTokenObtainPairView, FilterPresetViewSet, FinalInspectionViewSet,
-    StyleMasterViewSet, SampleCommentViewSet, StyleLinkViewSet, FactoryViewSet
+    StyleMasterViewSet, SampleCommentViewSet, SampleCommentImageViewSet, StyleLinkViewSet, FactoryViewSet
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -20,6 +20,7 @@ router.register(r'factories', FactoryViewSet)
 # Style Cycle routes
 router.register(r'styles', StyleMasterViewSet)
 router.register(r'sample-comments', SampleCommentViewSet)
+router.register(r'sample-comment-images', SampleCommentImageViewSet)
 router.register(r'style-links', StyleLinkViewSet)
 
 urlpatterns = [
