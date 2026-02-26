@@ -17,7 +17,8 @@ def get_user_type(user):
 
 class CanEditEvaluation(BasePermission):
     """
-    Only Quality Head and Quality Supervisor can edit evaluations.
+    Quality Head/Supervisor can edit all evaluations.
+    QA can create evaluations and edit/delete their own.
     Superusers always have access.
     """
     def has_permission(self, request, view):
@@ -27,7 +28,8 @@ class CanEditEvaluation(BasePermission):
         if user.is_superuser:
             return True
         user_type = get_user_type(user)
-        return user_type in ['quality_head', 'quality_supervisor']
+        # QA, Quality Head, Quality Supervisor can create/edit
+        return user_type in ['qa', 'quality_head', 'quality_supervisor']
     
     def has_object_permission(self, request, view, obj):
         if request.method in ['GET', 'HEAD', 'OPTIONS']:
@@ -36,7 +38,13 @@ class CanEditEvaluation(BasePermission):
         if user.is_superuser:
             return True
         user_type = get_user_type(user)
-        return user_type in ['quality_head', 'quality_supervisor']
+        # Quality Head/Supervisor can edit any
+        if user_type in ['quality_head', 'quality_supervisor']:
+            return True
+        # QA can only edit their own
+        if user_type == 'qa':
+            return obj.created_by == user
+        return False
 
 
 class CanEditFinalInspection(BasePermission):
