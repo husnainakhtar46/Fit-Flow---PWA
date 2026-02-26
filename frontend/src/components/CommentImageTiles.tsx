@@ -61,6 +61,30 @@ const CommentImageTiles = ({
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // ---- Clipboard paste handler (container-level, not document-level) ----
+    const handlePaste = useCallback((e: React.ClipboardEvent) => {
+        if (!editable) return;
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        const imageFiles: File[] = [];
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file) {
+                    const ext = item.type.split('/')[1] || 'png';
+                    const named = new File([file], `pasted-image-${Date.now()}.${ext}`, { type: file.type });
+                    imageFiles.push(named);
+                }
+            }
+        }
+        if (imageFiles.length > 0) {
+            e.preventDefault();
+            onFilesSelected(imageFiles);
+        }
+    }, [editable, onFilesSelected]);
+
     // Merge existing images + pending previews into one display list
     const allItems: { type: 'existing' | 'pending'; src: string; id?: string; pendingIndex?: number }[] = [
         ...images.map((img) => ({
@@ -115,7 +139,7 @@ const CommentImageTiles = ({
     if (totalCount === 0 && !editable) return null;
 
     return (
-        <div className="mt-2">
+        <div className="mt-2 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-1 rounded-lg" onPaste={handlePaste} tabIndex={0}>
             <div className="flex items-center gap-2 flex-wrap">
                 {/* Thumbnail tiles */}
                 {visibleItems.map((item, idx) => (
@@ -172,12 +196,13 @@ const CommentImageTiles = ({
                 {/* Upload button (edit mode only) */}
                 {editable && (
                     <button
-                        className={`${TILE_SIZE} rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-blue-500 hover:border-blue-400 transition-colors flex-shrink-0`}
+                        className={`${TILE_SIZE} rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-0.5 text-gray-400 hover:text-blue-500 hover:border-blue-400 transition-colors flex-shrink-0`}
                         onClick={() => fileInputRef.current?.click()}
                         type="button"
+                        title="Click to browse files, or Ctrl+V to paste from clipboard"
                     >
                         <Camera className="w-5 h-5" />
-                        <span className="text-[10px] font-medium">Add</span>
+                        <span className="text-[9px] font-medium">Add / Paste</span>
                     </button>
                 )}
 

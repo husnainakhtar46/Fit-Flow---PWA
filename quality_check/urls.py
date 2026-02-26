@@ -22,6 +22,8 @@ router.register(r'styles', StyleMasterViewSet)
 router.register(r'sample-comments', SampleCommentViewSet)
 router.register(r'sample-comment-images', SampleCommentImageViewSet)
 router.register(r'style-links', StyleLinkViewSet)
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -30,3 +32,7 @@ urlpatterns = [
     path('api/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
+
+# Serve media files in development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
