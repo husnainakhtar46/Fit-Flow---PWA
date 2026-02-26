@@ -410,9 +410,22 @@ const StyleCycle = () => {
 
     /** Delete an existing image from the backend */
     const handleExistingImageRemove = async (imageId: string) => {
+        // Confirmation dialog to prevent accidental deletion
+        if (!confirm('Are you sure you want to permanently delete this image?')) return;
+
         try {
             await api.delete(`/sample-comment-images/${imageId}/`);
             refetchDetails();
+            // Also remove from local editing state so UI updates immediately
+            if (editingComment) {
+                setEditingComment(prev => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        images: prev.images?.filter(img => img.id !== imageId)
+                    };
+                });
+            }
             toast.success('Image deleted');
         } catch {
             toast.error('Failed to delete image');

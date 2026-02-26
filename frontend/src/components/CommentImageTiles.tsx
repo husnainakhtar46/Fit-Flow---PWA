@@ -82,7 +82,7 @@ const CommentImageTiles = ({
                 const file = item.getAsFile();
                 if (file) {
                     const ext = item.type.split('/')[1] || 'png';
-                    const named = new File([file], `pasted-image-${Date.now()}.${ext}`, { type: file.type });
+                    const named = new File([file], `pasted-image-${Date.now()}-${i}.${ext}`, { type: file.type });
                     imageFiles.push(named);
                 }
             }
