@@ -5,7 +5,7 @@
  * Shows thumbnail previews under each comment category (WhatsApp/Slack style).
  * Features: thumbnail grid, "+N more" overflow, fullscreen lightbox, upload zone.
  */
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Camera, X, ChevronLeft, ChevronRight, ZoomIn, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
 import api from '../lib/api';
@@ -60,6 +60,14 @@ const CommentImageTiles = ({
 }: CommentImageTilesProps) => {
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const lightboxRef = useRef<HTMLDivElement>(null);
+
+    // Auto-focus lightbox when it opens so keyboard navigation works immediately
+    useEffect(() => {
+        if (lightboxIndex !== null && lightboxRef.current) {
+            lightboxRef.current.focus();
+        }
+    }, [lightboxIndex]);
 
     // ---- Clipboard paste handler (container-level, not document-level) ----
     const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -222,7 +230,8 @@ const CommentImageTiles = ({
             ========================================== */}
             {lightboxIndex !== null && allItems[lightboxIndex] && (
                 <div
-                    className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+                    ref={lightboxRef}
+                    className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center outline-none"
                     onClick={closeLightbox}
                     onKeyDown={handleKeyDown}
                     tabIndex={0}
