@@ -1,8 +1,8 @@
 # Fit Flow Quality Check System
 ## Future Features Roadmap
 
-**Document Version:** 2.0  
-**Last Updated:** December 2025  
+**Document Version:** 2.1  
+**Last Updated:** February 2026  
 **Prepared for:** Fit Flow Development Team
 
 ---
@@ -88,8 +88,10 @@
 - ✅ Camera integration on mobile
 - ✅ Automatic image compression (WebP, 85% quality, max 1600x1600)
 - ✅ Cloud storage (Google Cloud Storage)
+- ✅ Direct image pasting from clipboard
+- ✅ Advanced frontend WebP compression routines
 
-**Implemented in:** File upload handling, image optimization middleware
+**Implemented in:** File upload handling, image optimization middleware, `CommentImageTiles.tsx`
 
 ---
 
@@ -119,9 +121,35 @@
 
 ---
 
+### 11. Auto-Save Drafts ✓
+**Status:** Implemented  
+**Completion Date:** February 2026
+
+- ✅ Save inspection/evaluation progress automatically
+- ✅ Resume unfinished Drafts with visibility control (QA/Admins)
+- ✅ Clear draft indicators
+- ✅ Draft cleanup after completion
+
+**Implemented in:** Draft status backend, Evaluation Forms
+
+---
+
+### 12. Comments/Discussion Threads ✓
+**Status:** Implemented  
+**Completion Date:** February 2026
+
+- ✅ Comments integrated (e.g., Style Cycle)
+- ✅ Image attachments in comments
+- ✅ Clipboard pasting support for images
+- ✅ Image compression on frontend for faster uploads
+
+**Implemented in:** `StyleCycle.tsx`, `CommentImageTiles.tsx`
+
+---
+
 ## 🚀 High-Priority Features (Next Phase)
 
-### 9. Audit Trail & History
+### 11. Audit Trail & History
 **Priority:** High  
 **Complexity:** Medium  
 **Estimated Time:** 3 weeks
@@ -143,7 +171,7 @@
 
 ---
 
-### 10. Bulk Operations
+### 12. Bulk Operations
 **Priority:** High  
 **Complexity:** Medium  
 **Estimated Time:** 3 weeks
@@ -165,29 +193,7 @@
 
 ---
 
-### 11. Auto-Save Drafts
-**Priority:** High  
-**Complexity:** Medium  
-**Estimated Time:** 2 weeks
-
-**Description:**
-- Save inspection progress automatically
-- Resume unfinished inspections
-- Clear draft indicators
-- Draft cleanup after completion
-
-**Benefits:**
-- Prevent data loss
-- Flexible workflow
-
-**Technical Approach:**
-- LocalStorage for frontend drafts
-- Backend draft status field
-- Auto-save timer
-
----
-
-### 12. Image Annotation
+### 13. Image Annotation
 **Priority:** High  
 **Complexity:** Medium  
 **Estimated Time:** 2 weeks
@@ -210,7 +216,7 @@
 
 ## 📊 Analytics & Reporting
 
-### 13. Custom Report Builder
+### 14. Custom Report Builder
 **Priority:** Medium  
 **Complexity:** High  
 **Estimated Time:** 4 weeks
@@ -228,7 +234,7 @@
 
 ---
 
-### 14. Measurement Analytics
+### 15. Measurement Analytics
 **Priority:** Medium  
 **Complexity:** Medium  
 **Estimated Time:** 3 weeks
@@ -243,7 +249,7 @@
 
 ## 🔄 Workflow Enhancements
 
-### 15. Approval Workflow
+### 16. Approval Workflow
 **Priority:** High  
 **Complexity:** High  
 **Estimated Time:** 4 weeks
@@ -260,7 +266,7 @@
 
 ---
 
-### 16. Batch/Lot Tracking
+### 17. Batch/Lot Tracking
 **Priority:** Medium  
 **Complexity:** High  
 **Estimated Time:** 3 weeks
@@ -270,18 +276,6 @@
 - Batch-level statistics
 - Batch acceptance/rejection
 - Traceability reports
-
----
-
-### 17. Comments/Discussion Threads
-**Priority:** Medium  
-**Complexity:** Medium  
-**Estimated Time:** 2 weeks
-
-**Description:**
-- Comments on inspections
-- @mentions
-- Email notifications for replies
 
 ---
 
@@ -445,34 +439,33 @@
 ### Q1 2026: Foundation & Productivity
 **Focus:** High-impact features that save time
 
-1. **Auto-Save Drafts** (2 weeks)
+1. **Audit Trail** (3 weeks)
 2. **Bulk Operations** (3 weeks)
-3. **Audit Trail** (3 weeks)
+3. **Image Annotation** (2 weeks)
 
-**Expected Impact:** Prevent data loss, handle high-volume operations efficiently
+**Expected Impact:** Handle high-volume operations efficiently, prevent data loss
 
 ---
 
 ### Q2 2026: Quality & Collaboration
 **Focus:** Enhanced quality control and teamwork
 
-4. **Image Annotation** (2 weeks)
-5. **Approval Workflow** (4 weeks)
-6. **Comments/Discussion** (2 weeks)
-7. **Automated Backups** (2 weeks)
+4. **Approval Workflow** (4 weeks)
+5. **Automated Backups** (2 weeks)
+6. **Custom Report Builder** (4 weeks)
 
-**Expected Impact:** Better quality documentation, structured approval process
+**Expected Impact:** Better quality documentation, structured approval process, management reporting
 
 ---
 
 ### Q3 2026: Analytics & Reporting
 **Focus:** Better insights and reporting
 
-8. **Custom Report Builder** (4 weeks)
-9. **Measurement Analytics** (3 weeks)
-10. **Batch/Lot Tracking** (3 weeks)
+7. **Measurement Analytics** (3 weeks)
+8. **Batch/Lot Tracking** (3 weeks)
+9. **Customer Portal** (4 weeks)
 
-**Expected Impact:** Data-driven decision making, lot-level traceability
+**Expected Impact:** Data-driven decision making, lot-level traceability, customer value
 
 ---
 
