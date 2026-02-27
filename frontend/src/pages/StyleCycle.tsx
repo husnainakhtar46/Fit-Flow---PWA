@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Trash2, Search, ExternalLink, Edit2, ChevronLeft, X, Save, Link as LinkIcon, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../lib/api';
+import { compressImages } from '../lib/imageUtils';
 import CommentImageTiles, { type CommentImage } from '../components/CommentImageTiles';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -124,6 +125,7 @@ const StyleCycle = () => {
     const [editingComment, setEditingComment] = useState<SampleComment | null>(null);
     const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
     const [pendingImages, setPendingImages] = useState<PendingImagesMap>({ ...EMPTY_PENDING });
+    const [isCompressing, setIsCompressing] = useState(false);
 
     // Role-Based Access Control (RBAC) Check Validate
     // QA roles are restricted from editing directly unless they are superusers.
@@ -392,12 +394,18 @@ const StyleCycle = () => {
         }
     };
 
-    /** Add files to the pending map for a given category */
-    const handlePendingAdd = (category: ImageCategory, files: File[]) => {
-        setPendingImages(prev => ({
-            ...prev,
-            [category]: [...prev[category], ...files],
-        }));
+    /** Add files to the pending map for a given category (compresses first) */
+    const handlePendingAdd = async (category: ImageCategory, files: File[]) => {
+        setIsCompressing(true);
+        try {
+            const compressed = await compressImages(files);
+            setPendingImages(prev => ({
+                ...prev,
+                [category]: [...prev[category], ...compressed],
+            }));
+        } finally {
+            setIsCompressing(false);
+        }
     };
 
     /** Remove a pending file by index for a given category */
@@ -783,6 +791,7 @@ const StyleCycle = () => {
                                     onRemovePending={(i) => handlePendingRemove('general', i)}
                                     onRemoveExisting={handleExistingImageRemove}
                                     editable={true}
+                                    isCompressing={isCompressing}
                                 />
                             </div>
                             <div>
@@ -802,6 +811,7 @@ const StyleCycle = () => {
                                     onRemovePending={(i) => handlePendingRemove('fit', i)}
                                     onRemoveExisting={handleExistingImageRemove}
                                     editable={true}
+                                    isCompressing={isCompressing}
                                 />
                             </div>
                             <div>
@@ -821,6 +831,7 @@ const StyleCycle = () => {
                                     onRemovePending={(i) => handlePendingRemove('workmanship', i)}
                                     onRemoveExisting={handleExistingImageRemove}
                                     editable={true}
+                                    isCompressing={isCompressing}
                                 />
                             </div>
                             <div>
@@ -840,6 +851,7 @@ const StyleCycle = () => {
                                     onRemovePending={(i) => handlePendingRemove('wash', i)}
                                     onRemoveExisting={handleExistingImageRemove}
                                     editable={true}
+                                    isCompressing={isCompressing}
                                 />
                             </div>
                             <div>
@@ -859,6 +871,7 @@ const StyleCycle = () => {
                                     onRemovePending={(i) => handlePendingRemove('fabric', i)}
                                     onRemoveExisting={handleExistingImageRemove}
                                     editable={true}
+                                    isCompressing={isCompressing}
                                 />
                             </div>
                             <div>
@@ -878,6 +891,7 @@ const StyleCycle = () => {
                                     onRemovePending={(i) => handlePendingRemove('accessories', i)}
                                     onRemoveExisting={handleExistingImageRemove}
                                     editable={true}
+                                    isCompressing={isCompressing}
                                 />
                             </div>
                             <div className="flex justify-end gap-2 pt-4 border-t">

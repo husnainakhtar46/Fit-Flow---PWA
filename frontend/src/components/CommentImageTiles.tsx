@@ -6,7 +6,7 @@
  * Features: thumbnail grid, "+N more" overflow, fullscreen lightbox, upload zone.
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Camera, X, ChevronLeft, ChevronRight, ZoomIn, Trash2 } from 'lucide-react';
+import { Camera, X, ChevronLeft, ChevronRight, ZoomIn, Trash2, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import api from '../lib/api';
 
@@ -37,6 +37,8 @@ interface CommentImageTilesProps {
     editable: boolean;
     /** Max thumbnails to show before "+N more" */
     maxVisible?: number;
+    /** Whether images are currently being compressed */
+    isCompressing?: boolean;
 }
 
 // ==========================================
@@ -57,6 +59,7 @@ const CommentImageTiles = ({
     onRemoveExisting,
     editable,
     maxVisible = MAX_VISIBLE_DEFAULT,
+    isCompressing = false,
 }: CommentImageTilesProps) => {
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -204,13 +207,20 @@ const CommentImageTiles = ({
                 {/* Upload button (edit mode only) */}
                 {editable && (
                     <button
-                        className={`${TILE_SIZE} rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-0.5 text-gray-400 hover:text-blue-500 hover:border-blue-400 transition-colors flex-shrink-0`}
-                        onClick={() => fileInputRef.current?.click()}
+                        className={`${TILE_SIZE} rounded-lg border-2 border-dashed ${isCompressing ? 'border-blue-400 bg-blue-50' : 'border-gray-300'} flex flex-col items-center justify-center gap-0.5 ${isCompressing ? 'text-blue-500' : 'text-gray-400 hover:text-blue-500 hover:border-blue-400'} transition-colors flex-shrink-0`}
+                        onClick={() => !isCompressing && fileInputRef.current?.click()}
                         type="button"
-                        title="Click to browse files, or Ctrl+V to paste from clipboard"
+                        title={isCompressing ? 'Compressing images...' : 'Click to browse files, or Ctrl+V to paste from clipboard'}
+                        disabled={isCompressing}
                     >
-                        <Camera className="w-5 h-5" />
-                        <span className="text-[9px] font-medium">Add / Paste</span>
+                        {isCompressing ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                            <Camera className="w-5 h-5" />
+                        )}
+                        <span className="text-[9px] font-medium">
+                            {isCompressing ? 'Compressing...' : 'Add / Paste'}
+                        </span>
                     </button>
                 )}
 
