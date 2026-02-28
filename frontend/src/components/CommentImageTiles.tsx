@@ -9,6 +9,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Camera, X, ChevronLeft, ChevronRight, ZoomIn, Trash2, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import api from '../lib/api';
+import { formatDate } from '../utils/dateFormatter';
 
 // ==========================================
 // Types
@@ -97,11 +98,12 @@ const CommentImageTiles = ({
     }, [editable, onFilesSelected]);
 
     // Merge existing images + pending previews into one display list
-    const allItems: { type: 'existing' | 'pending'; src: string; id?: string; pendingIndex?: number }[] = [
+    const allItems: { type: 'existing' | 'pending'; src: string; id?: string; pendingIndex?: number; uploadedAt?: string }[] = [
         ...images.map((img) => ({
             type: 'existing' as const,
             src: img.image.startsWith('http') ? img.image : `${api.defaults.baseURL}${img.image}`,
             id: img.id,
+            uploadedAt: img.uploaded_at,
         })),
         ...pendingFiles.map((file, i) => ({
             type: 'pending' as const,
@@ -154,42 +156,49 @@ const CommentImageTiles = ({
             <div className="flex items-center gap-2 flex-wrap">
                 {/* Thumbnail tiles */}
                 {visibleItems.map((item, idx) => (
-                    <div
-                        key={item.id || `pending-${item.pendingIndex}`}
-                        className={`${TILE_SIZE} relative rounded-lg overflow-hidden border border-gray-200 cursor-pointer group flex-shrink-0 transition-shadow hover:shadow-md`}
-                        onClick={() => openLightbox(idx)}
-                    >
-                        <img
-                            src={item.src}
-                            alt={`Attachment ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                        />
-                        {/* Hover overlay with zoom icon */}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                            <ZoomIn className="w-5 h-5 text-white drop-shadow" />
-                        </div>
-                        {/* Remove button (edit mode only) */}
-                        {editable && (
-                            <button
-                                className="absolute top-0.5 right-0.5 p-0.5 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (item.type === 'existing' && item.id) {
-                                        onRemoveExisting(item.id);
-                                    } else if (item.type === 'pending' && item.pendingIndex !== undefined) {
-                                        onRemovePending(item.pendingIndex);
-                                    }
-                                }}
-                            >
-                                <X className="w-3 h-3 text-white" />
-                            </button>
-                        )}
-                        {/* Pending indicator */}
-                        {item.type === 'pending' && (
-                            <div className="absolute bottom-0 left-0 right-0 bg-blue-500/80 text-white text-[9px] text-center py-0.5">
-                                New
+                    <div key={item.id || `pending-${item.pendingIndex}`} className="flex flex-col items-center gap-0.5">
+                        <div
+                            className={`${TILE_SIZE} relative rounded-lg overflow-hidden border border-gray-200 cursor-pointer group flex-shrink-0 transition-shadow hover:shadow-md`}
+                            onClick={() => openLightbox(idx)}
+                        >
+                            <img
+                                src={item.src}
+                                alt={`Attachment ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                            />
+                            {/* Hover overlay with zoom icon */}
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                <ZoomIn className="w-5 h-5 text-white drop-shadow" />
                             </div>
+                            {/* Remove button (edit mode only) */}
+                            {editable && (
+                                <button
+                                    className="absolute top-0.5 right-0.5 p-0.5 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (item.type === 'existing' && item.id) {
+                                            onRemoveExisting(item.id);
+                                        } else if (item.type === 'pending' && item.pendingIndex !== undefined) {
+                                            onRemovePending(item.pendingIndex);
+                                        }
+                                    }}
+                                >
+                                    <X className="w-3 h-3 text-white" />
+                                </button>
+                            )}
+                            {/* Pending indicator */}
+                            {item.type === 'pending' && (
+                                <div className="absolute bottom-0 left-0 right-0 bg-blue-500/80 text-white text-[9px] text-center py-0.5">
+                                    New
+                                </div>
+                            )}
+                        </div>
+                        {/* Upload date for existing images */}
+                        {item.type === 'existing' && item.uploadedAt && (
+                            <span className="text-[9px] text-gray-400 leading-none">
+                                {formatDate(item.uploadedAt)}
+                            </span>
                         )}
                     </div>
                 ))}

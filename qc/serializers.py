@@ -402,10 +402,16 @@ class SampleCommentSerializer(serializers.ModelSerializer):
             'id', 'sample_type', 'sample_number', 'sample_number_display',
             'comments_general', 'comments_fit', 'comments_workmanship',
             'comments_wash', 'comments_fabric', 'comments_accessories',
+            'general_edited_at', 'fit_edited_at', 'workmanship_edited_at',
+            'wash_edited_at', 'fabric_edited_at', 'accessories_edited_at',
             'images',
             'created_at', 'updated_at', 'created_by_username'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by_username', 'sample_number_display']
+        read_only_fields = [
+            'id', 'created_at', 'updated_at', 'created_by_username', 'sample_number_display',
+            'general_edited_at', 'fit_edited_at', 'workmanship_edited_at',
+            'wash_edited_at', 'fabric_edited_at', 'accessories_edited_at',
+        ]
 
 
 class StyleMasterListSerializer(serializers.ModelSerializer):

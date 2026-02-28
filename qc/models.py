@@ -4,6 +4,7 @@ from django.db import models, transaction
 from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -688,15 +689,51 @@ class SampleComment(models.Model):
     comments_wash = models.TextField(blank=True, verbose_name="Wash Comments")
     comments_fabric = models.TextField(blank=True, verbose_name="Fabric Comments")
     comments_accessories = models.TextField(blank=True, verbose_name="Accessories Comments")
+
+    # Per-section edit timestamps (reference only, not used by evaluation form)
+    general_edited_at = models.DateTimeField(null=True, blank=True)
+    fit_edited_at = models.DateTimeField(null=True, blank=True)
+    workmanship_edited_at = models.DateTimeField(null=True, blank=True)
+    wash_edited_at = models.DateTimeField(null=True, blank=True)
+    fabric_edited_at = models.DateTimeField(null=True, blank=True)
+    accessories_edited_at = models.DateTimeField(null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
 
+    # Mapping of comment fields to their corresponding edited_at timestamp fields
+    SECTION_TIMESTAMP_MAP = {
+        'comments_general': 'general_edited_at',
+        'comments_fit': 'fit_edited_at',
+        'comments_workmanship': 'workmanship_edited_at',
+        'comments_wash': 'wash_edited_at',
+        'comments_fabric': 'fabric_edited_at',
+        'comments_accessories': 'accessories_edited_at',
+    }
+
     class Meta:
         ordering = ['-sample_number', '-created_at']  # Latest sample number first
         verbose_name = "Sample Comment"
         verbose_name_plural = "Sample Comments"
+
+    def save(self, *args, **kwargs):
+        """Auto-detect which comment sections changed and stamp their edited_at fields."""
+        if self.pk:
+            try:
+                old = SampleComment.objects.filter(pk=self.pk).values(
+                    *self.SECTION_TIMESTAMP_MAP.keys()
+                ).first()
+                if old:
+                    now = timezone.now()
+                    for field, ts_field in self.SECTION_TIMESTAMP_MAP.items():
+                        new_val = getattr(self, field, '')
+                        old_val = old.get(field, '')
+                        if new_val != old_val:
+                            setattr(self, ts_field, now)
+            except Exception:
+                pass  # Fail silently — timestamps are reference-only
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.style.po_number} - {self.sample_type} ({self.get_sample_number_display()})"

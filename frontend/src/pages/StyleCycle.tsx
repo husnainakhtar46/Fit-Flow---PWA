@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Plus, Trash2, Search, ExternalLink, Edit2, ChevronLeft, X, Save, Link as LinkIcon, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../lib/api';
 import { compressImages } from '../lib/imageUtils';
+import { formatDate, formatDateTime } from '../utils/dateFormatter';
 import CommentImageTiles, { type CommentImage } from '../components/CommentImageTiles';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -43,6 +44,7 @@ interface StyleLink {
     id?: string;
     label: string;
     url: string;
+    created_at?: string;
 }
 
 interface SampleComment {
@@ -56,6 +58,12 @@ interface SampleComment {
     comments_wash: string;
     comments_fabric: string;
     comments_accessories: string;
+    general_edited_at?: string;
+    fit_edited_at?: string;
+    workmanship_edited_at?: string;
+    wash_edited_at?: string;
+    fabric_edited_at?: string;
+    accessories_edited_at?: string;
     images?: CommentImage[];
     created_at?: string;
     updated_at?: string;
@@ -929,7 +937,7 @@ const StyleCycle = () => {
                                                     <span className="text-xs text-blue-600 font-medium">LATEST</span>
                                                 )}
                                                 <span className="text-sm text-gray-500">
-                                                    {comment.updated_at && new Date(comment.updated_at).toLocaleDateString()}
+                                                    {comment.created_at && formatDate(comment.created_at)}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -962,6 +970,7 @@ const StyleCycle = () => {
                                                             label: 'General Feedback',
                                                             value: comment.comments_general,
                                                             category: 'general' as ImageCategory,
+                                                            editedAt: comment.general_edited_at,
                                                             color: 'text-blue-600',
                                                             bg: 'bg-blue-50',
                                                             border: 'border-blue-100'
@@ -970,6 +979,7 @@ const StyleCycle = () => {
                                                             label: 'Fit Comments',
                                                             value: comment.comments_fit,
                                                             category: 'fit' as ImageCategory,
+                                                            editedAt: comment.fit_edited_at,
                                                             color: 'text-indigo-600',
                                                             bg: 'bg-indigo-50',
                                                             border: 'border-indigo-100'
@@ -978,6 +988,7 @@ const StyleCycle = () => {
                                                             label: 'Workmanship',
                                                             value: comment.comments_workmanship,
                                                             category: 'workmanship' as ImageCategory,
+                                                            editedAt: comment.workmanship_edited_at,
                                                             color: 'text-amber-600',
                                                             bg: 'bg-amber-50',
                                                             border: 'border-amber-100'
@@ -986,6 +997,7 @@ const StyleCycle = () => {
                                                             label: 'Wash Comments',
                                                             value: comment.comments_wash,
                                                             category: 'wash' as ImageCategory,
+                                                            editedAt: comment.wash_edited_at,
                                                             color: 'text-cyan-600',
                                                             bg: 'bg-cyan-50',
                                                             border: 'border-cyan-100'
@@ -994,6 +1006,7 @@ const StyleCycle = () => {
                                                             label: 'Fabric Comments',
                                                             value: comment.comments_fabric,
                                                             category: 'fabric' as ImageCategory,
+                                                            editedAt: comment.fabric_edited_at,
                                                             color: 'text-purple-600',
                                                             bg: 'bg-purple-50',
                                                             border: 'border-purple-100'
@@ -1002,6 +1015,7 @@ const StyleCycle = () => {
                                                             label: 'Accessories',
                                                             value: comment.comments_accessories,
                                                             category: 'accessories' as ImageCategory,
+                                                            editedAt: comment.accessories_edited_at,
                                                             color: 'text-rose-600',
                                                             bg: 'bg-rose-50',
                                                             border: 'border-rose-100'
@@ -1012,10 +1026,15 @@ const StyleCycle = () => {
                                                         if (!item.value && categoryImages.length === 0) return null;
                                                         return (
                                                             <div key={item.label} className={`rounded-xl border ${item.border} ${item.bg} overflow-hidden`}>
-                                                                <div className="px-4 py-2 border-b border-black/5 flex items-center gap-2">
+                                                                <div className="px-4 py-2 border-b border-black/5 flex items-center justify-between gap-2">
                                                                     <h4 className={`font-semibold text-sm ${item.color}`}>
                                                                         {item.label}
                                                                     </h4>
+                                                                    {item.editedAt && (
+                                                                        <span className="text-xs text-gray-400 italic">
+                                                                            Edited: {formatDateTime(item.editedAt)}
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                                 <div className="p-4 bg-white/50">
                                                                     {item.value && (
@@ -1090,6 +1109,9 @@ const StyleCycle = () => {
                                     <div className="flex-1 min-w-0">
                                         <p className="font-medium truncate">{link.label}</p>
                                         <p className="text-sm text-gray-500 truncate">{link.url}</p>
+                                        {link.created_at && (
+                                            <p className="text-xs text-gray-400 mt-0.5">Added: {formatDate(link.created_at)}</p>
+                                        )}
                                     </div>
                                     <div className="flex gap-1">
                                         <Button
