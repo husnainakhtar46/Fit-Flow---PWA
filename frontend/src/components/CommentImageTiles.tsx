@@ -101,7 +101,7 @@ const CommentImageTiles = ({
     const allItems: { type: 'existing' | 'pending'; src: string; id?: string; pendingIndex?: number; uploadedAt?: string }[] = [
         ...images.map((img) => ({
             type: 'existing' as const,
-            src: img.image.startsWith('http') ? img.image : `${api.defaults.baseURL}${img.image}`,
+            src: img.image.startsWith('http') ? img.image : `${api.defaults.baseURL}${img.image.startsWith('/') ? '' : '/'}${img.image}`,
             id: img.id,
             uploadedAt: img.uploaded_at,
         })),
