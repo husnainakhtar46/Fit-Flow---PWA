@@ -48,8 +48,9 @@ def process_and_compress_image(image_file, max_dimension=1600, quality=85):
             original_name = image_file.name.rsplit('.', 1)[0] if '.' in image_file.name else image_file.name
             webp_filename = f"{original_name}.webp"
             
-            # Create Django File object
+            # Create Django File object with correct content type for GCS
             compressed_file = ContentFile(compressed_buffer.read(), name=webp_filename)
+            compressed_file.content_type = 'image/webp'  # Tells django-storages to set correct Content-Type on GCS
             
             return compressed_file, webp_filename
             

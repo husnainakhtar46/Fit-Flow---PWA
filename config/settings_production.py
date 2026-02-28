@@ -1,6 +1,10 @@
 from quality_check.settings import *
 import os
+import mimetypes
 from django.core.exceptions import ImproperlyConfigured
+
+# Ensure .webp is recognized (some Docker images don't have it)
+mimetypes.add_type('image/webp', '.webp')
 
 
 def get_required_env(var_name):
