@@ -699,6 +699,9 @@ class SampleCommentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def upload_images(self, request, pk=None):
         """Upload one or more images to a sample comment (compressed to WebP)."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         comment = self.get_object()
         files = request.FILES.getlist('images')
         category = request.data.get('category', 'general')
@@ -710,16 +713,23 @@ class SampleCommentViewSet(viewsets.ModelViewSet):
         created = []
         for f in files:
             try:
+                logger.info(f"Processing image: {f.name}, size: {f.size}")
                 compressed_file, _ = process_and_compress_image(f)
+                logger.info(f"Compressed to: {compressed_file.name}, saving to storage...")
                 img = SampleCommentImage.objects.create(
                     comment=comment,
                     image=compressed_file,
                     caption=caption,
                     category=category,
                 )
+                logger.info(f"Image saved successfully: {img.image.url}")
                 created.append(SampleCommentImageSerializer(img).data)
             except ValueError as e:
+                logger.error(f"Image processing error: {e}")
                 return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                logger.error(f"Image upload failed: {type(e).__name__}: {e}", exc_info=True)
+                return Response({'error': f'Upload failed: {type(e).__name__}: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(created, status=status.HTTP_201_CREATED)
 
