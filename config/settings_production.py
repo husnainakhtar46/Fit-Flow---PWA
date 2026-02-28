@@ -62,14 +62,10 @@ GS_PROJECT_ID = os.environ.get('GCP_PROJECT_ID')
 GS_QUERYSTRING_AUTH = False             # Use direct URLs (bucket IAM grants public read)
 
 # Django 5.x storage configuration (replaces deprecated DEFAULT_FILE_STORAGE / STATICFILES_STORAGE)
+# GCS options are read from top-level GS_* settings above
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
-        "OPTIONS": {
-            "bucket_name": GS_BUCKET_NAME,
-            "project_id": GS_PROJECT_ID,
-            "querystring_auth": False,
-        },
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
