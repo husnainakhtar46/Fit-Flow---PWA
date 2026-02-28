@@ -54,14 +54,27 @@ DATABASES = {
 
 # Static files with WhiteNoise
 MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Media files - Google Cloud Storage
-DEFAULT_FILE_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
 GS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', 'fitflow-media')
 GS_PROJECT_ID = os.environ.get('GCP_PROJECT_ID')
 GS_QUERYSTRING_AUTH = False             # Use direct URLs (bucket IAM grants public read)
+
+# Django 5.x storage configuration (replaces deprecated DEFAULT_FILE_STORAGE / STATICFILES_STORAGE)
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
+        "OPTIONS": {
+            "bucket_name": GS_BUCKET_NAME,
+            "project_id": GS_PROJECT_ID,
+            "querystring_auth": False,
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # CORS for frontend
 # CORS for frontend
