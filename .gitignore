@@ -92,3 +92,6 @@ deploy_v2.ps1
 
 # Documentation
 FRONTEND_GUIDELINES.md
+
+# Undocumented AI context metadata
+.infrastructure_context.md
