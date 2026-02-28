@@ -57,6 +57,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 DEFAULT_FILE_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
 GS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', 'fitflow-media')
 GS_PROJECT_ID = os.environ.get('GCP_PROJECT_ID')
+GS_DEFAULT_ACL = 'publicRead'          # Make uploaded files publicly readable
+GS_QUERYSTRING_AUTH = False             # Use direct URLs, not expiring signed URLs
 
 # CORS for frontend
 # CORS for frontend
