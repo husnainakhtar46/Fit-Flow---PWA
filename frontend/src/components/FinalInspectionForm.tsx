@@ -308,7 +308,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
       if (inspectionData.images) {
         setUploadedImages(inspectionData.images.map((img: { image: string; caption: string; category: string; id: string }) => ({
           file: new File([], "existing_image"), // Placeholder
-          previewUrl: img.image.startsWith('http') ? img.image : `${api.defaults.baseURL}${img.image}`, // Fix URL
+          previewUrl: img.image.startsWith('http') ? img.image : `${api.defaults.baseURL}${img.image.startsWith('/') ? '' : '/'}${img.image}`, // Fix URL for GCS
           caption: img.caption,
           category: img.category,
           id: img.id,

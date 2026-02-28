@@ -1114,8 +1114,8 @@ const EvaluationForm = () => {
                         // Handle both absolute and relative URLs
                         let imageUrl = img.image || null;
                         if (imageUrl && !imageUrl.startsWith('http')) {
-                            // Relative URL - prepend API base
-                            imageUrl = `${api.defaults.baseURL}${imageUrl}`;
+                            // Relative URL (local dev) - prepend API base
+                            imageUrl = `${api.defaults.baseURL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
                         }
                         console.log(`Image ${index}:`, imageUrl, 'Caption:', img.caption);
                         loadedImages[index] = {
@@ -1384,7 +1384,11 @@ const EvaluationForm = () => {
             if (data.images && Array.isArray(data.images)) {
                 data.images.forEach((img: any, index: number) => {
                     if (index < loadedImages.length) {
-                        loadedImages[index] = { file: img.image || null, caption: img.caption || '' };
+                        let draftImageUrl = img.image || null;
+                        if (draftImageUrl && !draftImageUrl.startsWith('http')) {
+                            draftImageUrl = `${api.defaults.baseURL}${draftImageUrl.startsWith('/') ? '' : '/'}${draftImageUrl}`;
+                        }
+                        loadedImages[index] = { file: draftImageUrl, caption: img.caption || '' };
                     }
                 });
             }
