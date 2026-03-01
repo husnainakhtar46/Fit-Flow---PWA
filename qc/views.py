@@ -19,7 +19,7 @@ from .serializers import (
 from django.db.models import Prefetch
 from .filters import InspectionFilter
 from .services.pdf_generator import generate_pdf_buffer, generate_final_inspection_pdf
-from .permissions import CanEditEvaluation, CanEditFinalInspection, CanCreateInspection, CanAddCustomerFeedback, IsQualityHeadOrAdmin
+from .permissions import CanEditEvaluation, CanEditFinalInspection, CanCreateInspection, CanAddCustomerFeedback, IsQualityHeadOrAdmin, CanViewDashboard, CanManageTemplates
 from .utils import process_and_compress_image
 
 
@@ -226,6 +226,7 @@ class FactoryViewSet(viewsets.ModelViewSet):
 class TemplateViewSet(viewsets.ModelViewSet):
     queryset = Template.objects.all()
     serializer_class = TemplateSerializer
+    permission_classes = [CanManageTemplates]
     filter_backends = [filters.SearchFilter]
     search_fields = ['name', 'customer__name']
 
@@ -253,6 +254,8 @@ from django.db.models import Count, Q
 from django.db.models.functions import TruncMonth
 
 class DashboardView(APIView):
+    permission_classes = [CanViewDashboard]
+    
     def get(self, request):
         # Parse optional date range filters
         start_date = request.query_params.get('start_date')

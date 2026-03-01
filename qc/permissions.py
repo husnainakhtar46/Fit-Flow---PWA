@@ -117,13 +117,60 @@ class IsQualityHeadOrAdmin(BasePermission):
     Others can only view.
     """
     def has_permission(self, request, view):
-        return True # TEMPORARY DEBUG: Allow any access
-        
-        # Original logic below - commented out for debug
-        # if request.method in ['GET', 'HEAD', 'OPTIONS']:
-        #     return True
-        # user = request.user
-        # if user.is_superuser:
-        #     return True
-        # user_type = get_user_type(user)
-        # return user_type == 'quality_head'
+        if request.method in ['GET', 'HEAD', 'OPTIONS']:
+            return True
+        user = request.user
+        if user.is_superuser:
+            return True
+        user_type = get_user_type(user)
+        return user_type == 'quality_head'
+
+class IsMerchandiser(BasePermission):
+    """
+    Merchandisers can manage styles and sample comments.
+    Superusers always have access.
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if user.is_superuser:
+            return True
+        user_type = get_user_type(user)
+        return user_type == 'merchandiser'
+
+class IsQualityStaff(BasePermission):
+    """
+    QA, Quality Head, Quality Supervisor.
+    Superusers always have access.
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if user.is_superuser:
+            return True
+        user_type = get_user_type(user)
+        return user_type in ['qa', 'quality_head', 'quality_supervisor']
+
+class CanViewDashboard(BasePermission):
+    """
+    Quality Head and Quality Supervisor can view dashboard.
+    Superusers always have access.
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if user.is_superuser:
+            return True
+        user_type = get_user_type(user)
+        return user_type in ['quality_head', 'quality_supervisor']
+
+class CanManageTemplates(BasePermission):
+    """
+    Anyone but Merchandiser can view.
+    Only Quality Head or Admin can create/edit/delete.
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if user.is_superuser:
+            return True
+        user_type = get_user_type(user)
+        if request.method in ['GET', 'HEAD', 'OPTIONS']:
+            return user_type != 'merchandiser'
+        return user_type == 'quality_head'

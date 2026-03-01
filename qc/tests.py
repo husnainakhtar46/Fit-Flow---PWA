@@ -16,14 +16,14 @@ class AQLSampleSizeTests(TestCase):
     """Test ISO 2859-1 sample size calculation."""
     
     def test_very_small_order(self):
-        """Order qty <= 8 should return sample size 8."""
-        self.assertEqual(calculate_sample_size(5), 8)
-        self.assertEqual(calculate_sample_size(8), 8)
+        """Order qty <= 8 should return sample size 2."""
+        self.assertEqual(calculate_sample_size(5), 2)
+        self.assertEqual(calculate_sample_size(8), 2)
     
     def test_small_order_sizes(self):
-        """Orders up to 50 should return sample size 8."""
-        self.assertEqual(calculate_sample_size(15), 8)
-        self.assertEqual(calculate_sample_size(25), 8)
+        """Orders up to 50 should return corresponding sample size."""
+        self.assertEqual(calculate_sample_size(15), 3)
+        self.assertEqual(calculate_sample_size(25), 5)
         self.assertEqual(calculate_sample_size(50), 8)
     
     def test_medium_order_sizes(self):
@@ -73,9 +73,9 @@ class AQLLimitsTests(TestCase):
     def test_major_limits_standard_aql(self):
         """Major (AQL 2.5) limits for standard inspection."""
         self.assertEqual(get_aql_limits(8, 2.5), 0)
-        self.assertEqual(get_aql_limits(50, 2.5), 2)
-        self.assertEqual(get_aql_limits(125, 2.5), 5)
-        self.assertEqual(get_aql_limits(200, 2.5), 7)
+        self.assertEqual(get_aql_limits(50, 2.5), 3)
+        self.assertEqual(get_aql_limits(125, 2.5), 7)
+        self.assertEqual(get_aql_limits(200, 2.5), 10)
     
     def test_minor_limits(self):
         """Minor (AQL 4.0) limits are more lenient."""
@@ -149,7 +149,7 @@ class FinalInspectionResultTests(TestCase):
     
     def test_fail_on_major_over_limit(self):
         """Should fail when major defects exceed limit."""
-        # Sample size 50: Major limit = 2
+        # Sample size 50: Major limit = 3
         inspection = FinalInspection(
             customer=self.customer,
             inspection_date=date.today(),
@@ -157,7 +157,7 @@ class FinalInspectionResultTests(TestCase):
             style_no="STYLE-004",
             sample_size=50,
             critical_found=0, 
-            major_found=3,  # Over limit of 2
+            major_found=4,  # Over limit of 3
             minor_found=0
         )
         inspection.calculate_aql_limits()
@@ -232,5 +232,5 @@ class FinalInspectionAutoCalculationTests(TestCase):
         # Standard AQL: Critical=0, Major=2.5, Minor=4.0
         # Sample size 50 limits
         self.assertEqual(inspection.max_allowed_critical, 0)
-        self.assertEqual(inspection.max_allowed_major, 2)
+        self.assertEqual(inspection.max_allowed_major, 3)
         self.assertEqual(inspection.max_allowed_minor, 5)
