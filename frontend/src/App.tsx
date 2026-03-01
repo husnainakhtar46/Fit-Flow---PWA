@@ -4,6 +4,8 @@ import { useState, ReactNode } from 'react';
 import { Toaster } from './components/ui/toaster';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import { ForgotPassword } from './features/auth/components/ForgotPassword';
+import { VerifyAndResetPassword } from './features/auth/components/VerifyAndResetPassword';
 import Templates from './pages/Templates';
 import EvaluationForm from './pages/EvaluationForm';
 import Customers from './pages/Customers';
@@ -117,6 +119,8 @@ function App() {
             <Router>
                 <Routes>
                     <Route path="/login" element={<Login />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
+                    <Route path="/verify-reset-password" element={<VerifyAndResetPassword />} />
                     <Route element={<Layout />}>
                         <Route path="/" element={<HomeRedirect />} />
                         <Route path="/dashboard" element={<ProtectedDashboard />} />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../lib/api';
@@ -63,7 +63,12 @@ const Login = () => {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
+                            <div className="flex justify-between items-center mb-1">
+                                <Label htmlFor="password">Password</Label>
+                                <Link to="/forgot-password" className="text-sm font-medium text-blue-600 hover:text-blue-500 transition-colors">
+                                    Forgot Password?
+                                </Link>
+                            </div>
                             <Input
                                 id="password"
                                 type="password"

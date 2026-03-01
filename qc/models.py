@@ -785,5 +785,25 @@ class StyleLink(models.Model):
         verbose_name = "Style Link"
         verbose_name_plural = "Style Links"
 
+
     def __str__(self):
         return f"{self.style.po_number} - {self.label}"
+
+# ==================== Auth / Security Models ====================
+
+class OTPVerification(models.Model):
+    """Temporary storage for One-Time Passwords sent via email for password reset."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otp_requests')
+    otp_code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    def is_valid(self):
+        """Check if the OTP is un-used and not expired."""
+        return not self.is_used and self.expires_at > timezone.now()
+
+    def __str__(self):
+        return f"OTP for {self.user.email} - {'Used' if self.is_used else 'Active'}"
+
