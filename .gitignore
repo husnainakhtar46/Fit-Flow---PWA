@@ -95,3 +95,8 @@ FRONTEND_GUIDELINES.md
 
 # Undocumented AI context metadata
 .infrastructure_context.md
+
+# AI Tools
+.agents/
+.Antigravityrules
+Antigravityrules.md
