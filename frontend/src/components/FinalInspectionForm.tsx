@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, }  from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -20,7 +20,6 @@ import {
   ShipmentDetails,
   UploadedImage,
   DefectCounts,
-  ServerCalculations,
 } from './inspection';
 import { db, cacheCustomers, cacheTemplates, getCachedCustomers, getCachedTemplates } from '../lib/db';
 import { pdf } from '@react-pdf/renderer';
@@ -31,101 +30,16 @@ import { InlineSuggestionDropdown } from './InlineSuggestionDropdown';
 import { useStyleLookup } from '../hooks/useStyleLookup';
 import api from '../lib/api';
 
-
-
-interface FinalInspectionFormProps {
-  inspectionId?: string;
-  onClose: () => void;
-}
-
-interface Customer {
-  id: string;
-  name: string;
-}
-
-interface TemplatePOM {
-  id: string;
-  name: string;
-  default_tol: number;
-  default_std: number;
-}
-
-interface Template {
-  customer: string;
-  id: string;
-  name: string;
-  poms: TemplatePOM[];
-}
-
-interface SizeCheck {
-  size: string;
-  order_qty: number;
-  packed_qty: number;
-}
-
-interface MeasurementSample {
-  index: number;
-  value: number | string | null;
-}
-
-interface MeasurementInput {
-  pom_name: string;
-  spec: number;
-  tol: number;
-  samples: MeasurementSample[];
-  size_name: string;
-  size_field_id?: string;
-}
-
-interface FormData {
-  customer: string;
-  factory: string;
-  template: string; // Added template selection
-  inspection_date: string;
-  order_no: string;
-  style_no: string;
-  color: string;
-  inspection_attempt: '1st' | '2nd' | '3rd';
-  aql_standard: 'strict' | 'standard';
-  total_order_qty: number;
-  presented_qty: number;
-  sample_size: number;
-  total_cartons: number;
-  selected_cartons: number;
-  carton_length: number;
-  carton_width: number;
-  carton_height: number;
-  gross_weight: number;
-  net_weight: number;
-  remarks: string;
-  size_checks: SizeCheck[]; // For Quantity Breakdown
-  measurements: MeasurementInput[]; // For Garment Dimensions
-}
-
-const INITIAL_FORM_STATE: FormData = {
-  customer: '',
-  factory: '',
-  template: '',
-  order_no: '',
-  style_no: '',
-  color: '',
-  remarks: '',
-  inspection_date: new Date().toISOString().split('T')[0],
-  inspection_attempt: '1st',
-  aql_standard: 'standard',
-  sample_size: 0,
-  total_order_qty: 0,
-  presented_qty: 0,
-  total_cartons: 0,
-  selected_cartons: 0,
-  carton_length: 0,
-  carton_width: 0,
-  carton_height: 0,
-  gross_weight: 0,
-  net_weight: 0,
-  size_checks: [{ size: '', order_qty: 0, packed_qty: 0 }],
-  measurements: [],
-};
+import {
+  FinalInspectionFormProps,
+  Customer,
+  Template,
+  FormData as InspectionFormData,
+  INITIAL_FORM_STATE,
+  MeasurementInput
+} from '../types/inspection';
+import { useAQLCalculations } from '../hooks/useAQLCalculations';
+import { useGridInteractions } from '../hooks/useGridInteractions';
 
 export default function FinalInspectionForm({ inspectionId, onClose }: FinalInspectionFormProps) {
   const { toast } = useToast();
@@ -142,9 +56,6 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
   const [customDefect, setCustomDefect] = useState('');
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   // --- Grid Selection & Paste State ---
-  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
-  const [isDragSelecting, setIsDragSelecting] = useState(false);
-  const [dragStart, setDragStart] = useState<{ r: number, c: number } | null>(null);
 
   // Dynamic sample count (default 6 for final inspections)
   const [sampleCount, setSampleCount] = useState(6);
@@ -161,11 +72,10 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
     return sample?.value ?? '';
   };
 
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   // --- Form Setup ---
 
-  const { register, control, handleSubmit, watch, setValue, getValues, reset } = useForm<FormData>({
+  const { register, control, handleSubmit, watch, setValue, getValues, reset } = useForm<InspectionFormData>({
     defaultValues: INITIAL_FORM_STATE,
   });
 
@@ -410,62 +320,14 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
   const { critical, major, minor } = getTotalDefects();
 
-  // State for Server-Side Calculations
-  const [serverCalcs, setServerCalcs] = useState<ServerCalculations>({
-    sampleSize: 0,
-    maxCritical: 0,
-    maxMajor: 0,
-    maxMinor: 0,
-    result: 'Pending'
+  const { serverCalcs } = useAQLCalculations({
+    presentedQty: presentedQty || 0,
+    aqlStandard,
+    critical,
+    major,
+    minor,
+    setValue,
   });
-
-
-
-
-
-  // --- API Calculation Hook ---
-  const performCalculation = useCallback(async () => {
-    if (!presentedQty) return;
-
-    try {
-      const response = await api.post(
-        '/final-inspections/calculate_aql/',
-        {
-          qty: presentedQty,
-          standard: aqlStandard,
-          critical: critical,
-          major: major,
-          minor: minor
-        }
-      );
-
-      const data = response.data;
-
-      // Update Local State with Server Data
-      setServerCalcs({
-        sampleSize: data.sample_size,
-        maxCritical: data.limits.critical,
-        maxMajor: data.limits.major,
-        maxMinor: data.limits.minor,
-        result: data.result
-      });
-
-      // Update Form Field
-      setValue('sample_size', data.sample_size);
-
-    } catch (error) {
-      console.error("Calculation failed", error);
-    }
-  }, [presentedQty, aqlStandard, critical, major, minor, setValue]);
-
-  // --- Trigger Calculation ---
-  // Debounce to avoid spamming server while typing
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      performCalculation();
-    }, 500); // Wait 500ms after typing stops
-    return () => clearTimeout(timer);
-  }, [performCalculation]);
 
   // Helper to check tolerance
   const isOutOfTolerance = (value: string, spec: number, tol: number) => {
@@ -477,321 +339,22 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
 
   // --- Grid Helpers ---
-  const getCellId = (r: number, k: string) => `${r}-${k}`;
-  const isSelected = (index: number, key: string) => selectedCells.has(getCellId(index, key));
-
-  // Handle KeyDown (Enter for Navigation, Backspace/Delete for Bulk Clear)
-  // sizeMeasurementIndices: array of measurement indices belonging to current size grid
-  const handleCellKeyDown = (e: React.KeyboardEvent, index: number, key: string, sizeMeasurementIndices?: number[]) => {
-    // Handle Enter for Navigation
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const currentColIdx = columnKeys.indexOf(key);
-      if (currentColIdx === -1) return;
-
-      // If we have size-scoped indices, use them for navigation
-      if (sizeMeasurementIndices && sizeMeasurementIndices.length > 0) {
-        const posInSize = sizeMeasurementIndices.indexOf(index);
-        const nextPosInSize = posInSize + 1;
-
-        if (nextPosInSize < sizeMeasurementIndices.length) {
-          // Move to next row within same size grid
-          const nextIdx = sizeMeasurementIndices[nextPosInSize];
-          const nextInput = document.querySelector(`input[name="measurements.${nextIdx}.${key}"]`) as HTMLInputElement;
-          if (nextInput) {
-            nextInput.focus();
-            nextInput.select();
-          }
-        } else {
-          // At bottom of size grid, wrap to top of next column within same size
-          const nextColIdx = currentColIdx + 1;
-          if (nextColIdx < columnKeys.length) {
-            const nextColKey = columnKeys[nextColIdx];
-            const firstIdx = sizeMeasurementIndices[0];
-            const nextInput = document.querySelector(`input[name="measurements.${firstIdx}.${nextColKey}"]`) as HTMLInputElement;
-            if (nextInput) {
-              nextInput.focus();
-              nextInput.select();
-            }
-          }
-        }
-      } else {
-        // Fallback: global navigation (for non-size-grouped grids)
-        const nextRowIdx = index + 1;
-        if (nextRowIdx < measurementFields.length) {
-          const nextInput = document.querySelector(`input[name="measurements.${nextRowIdx}.${key}"]`) as HTMLInputElement;
-          if (nextInput) {
-            nextInput.focus();
-            nextInput.select();
-          }
-        } else {
-          const nextColIdx = currentColIdx + 1;
-          if (nextColIdx < columnKeys.length) {
-            const nextColKey = columnKeys[nextColIdx];
-            const nextInput = document.querySelector(`input[name="measurements.0.${nextColKey}"]`) as HTMLInputElement;
-            if (nextInput) {
-              nextInput.focus();
-              nextInput.select();
-            }
-          }
-        }
-      }
-      return;
-    }
-
-    // If Backspace/Delete is pressed
-    if (e.key === 'Backspace' || e.key === 'Delete') {
-      if (selectedCells.size > 0) {
-        if (selectedCells.has(getCellId(index, key)) || selectedCells.size > 0) {
-          e.preventDefault();
-
-          // Confirmation for bulk delete
-          if (selectedCells.size > 1) {
-            if (!confirm(`Are you sure you want to clear ${selectedCells.size} cells?`)) {
-              return;
-            }
-          }
-
-          // Group deletions by row to handle sample arrays correctly
-          const rowsToUpdate = new Map<number, Set<string>>();
-          selectedCells.forEach(cellId => {
-            const [rStr, k] = cellId.split('-');
-            const r = parseInt(rStr);
-            if (!rowsToUpdate.has(r)) rowsToUpdate.set(r, new Set());
-            rowsToUpdate.get(r)!.add(k);
-          });
-
-          const currentMeasurements = getValues('measurements');
-          let count = 0;
-
-          rowsToUpdate.forEach((keys, r) => {
-            if (r >= currentMeasurements.length) return;
-
-            // We need to clone the samples array to avoid direct mutation issues
-            let rowSamples = [...(currentMeasurements[r].samples || [])];
-            let samplesChanged = false;
-
-            keys.forEach(k => {
-              if (k === 'std' || k === 'tol' || k === 'spec') {
-                setValue(`measurements.${r}.${k}` as any, '');
-                count++;
-              } else if (k.startsWith('s')) {
-                // Handle sample deletion
-                const sampleNum = parseInt(k.replace('s', ''));
-                const existingIdx = rowSamples.findIndex(s => s.index === sampleNum);
-
-                if (existingIdx >= 0) {
-                  // Update existing sample to empty string
-                  rowSamples[existingIdx] = { ...rowSamples[existingIdx], value: '' };
-                  samplesChanged = true;
-                  count++;
-                }
-              }
-            });
-
-            // Only update samples array if changes were made
-            if (samplesChanged) {
-              setValue(`measurements.${r}.samples` as any, rowSamples);
-            }
-          });
-
-          if (count > 0) {
-            toast({ title: `Cleared ${count} cells` });
-          }
-        }
-      }
-    }
-  };
-
-  // Mouse Down (Start Drag)
-  const handleCellMouseDown = (index: number, key: string) => {
-    const cIndex = columnKeys.indexOf(key);
-    if (cIndex === -1) return;
-
-    setIsDragSelecting(true);
-    setDragStart({ r: index, c: cIndex });
-    setSelectedCells(new Set([getCellId(index, key)]));
-  };
-
-  // Mouse Enter (Drag Over)
-  const handleCellMouseEnter = (index: number, key: string) => {
-    if (isDragSelecting && dragStart) {
-      const cIndex = columnKeys.indexOf(key);
-      if (cIndex === -1) return;
-
-      const rMin = Math.min(dragStart.r, index);
-      const rMax = Math.max(dragStart.r, index);
-      const cMin = Math.min(dragStart.c, cIndex);
-      const cMax = Math.max(dragStart.c, cIndex);
-
-      const newSet = new Set<string>();
-      for (let r = rMin; r <= rMax; r++) {
-        for (let c = cMin; c <= cMax; c++) {
-          newSet.add(getCellId(r, columnKeys[c]));
-        }
-      }
-      setSelectedCells(newSet);
-    }
-  };
-
-  // Global Mouse Up (End Drag)
-  useEffect(() => {
-    const handleUp = () => {
-      setIsDragSelecting(false);
-      setDragStart(null);
-    };
-    window.addEventListener('mouseup', handleUp);
-    window.addEventListener('touchend', handleUp);
-    return () => {
-      window.removeEventListener('mouseup', handleUp);
-      window.removeEventListener('touchend', handleUp);
-    };
-  }, []);
-
-  // Mobile: Long Press Logic
-  const handleTouchStart = (index: number, key: string) => {
-    longPressTimer.current = setTimeout(() => {
-      const id = getCellId(index, key);
-      setSelectedCells(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(id)) newSet.delete(id);
-        else newSet.add(id);
-        return newSet;
-      });
-      if (navigator.vibrate) navigator.vibrate(50);
-    }, 500);
-  };
-
-  const handleTouchEnd = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  };
-
-  // Multi-cell Copy Handler
-  const handleCopy = (event: React.ClipboardEvent<HTMLInputElement>) => {
-    // Only override if we have a multi-cell selection
-    if (selectedCells.size === 0) return;
-
-    event.preventDefault();
-
-    // 1. Gather all selected data
-    const cellsToCopy: { r: number, c: number, val: string }[] = [];
-    const currentMeasurements = getValues('measurements');
-
-    selectedCells.forEach(cellId => {
-      const [rStr, key] = cellId.split('-');
-      const r = parseInt(rStr);
-      const c = columnKeys.indexOf(key);
-
-      if (r >= 0 && r < currentMeasurements.length && c !== -1) {
-        let val = '';
-        if (key === 'spec') {
-          val = String(currentMeasurements[r]?.spec ?? '');
-        } else if (key.startsWith('s')) {
-          const sampleNum = parseInt(key.replace('s', ''));
-          const sample = currentMeasurements[r]?.samples?.find((s: any) => s.index === sampleNum);
-          val = String(sample?.value ?? '');
-        }
-        cellsToCopy.push({ r, c, val });
-      }
-    });
-
-    if (cellsToCopy.length === 0) return;
-
-    // 2. Sort by Row then Column to order them correctly
-    cellsToCopy.sort((a, b) => {
-      if (a.r !== b.r) return a.r - b.r; // Top to bottom
-      return a.c - b.c; // Left to right
-    });
-
-    // 3. Construct Grid String (TSV)
-    const uniqueRows = [...new Set(cellsToCopy.map(x => x.r))].sort((a, b) => a - b);
-    const uniqueCols = [...new Set(cellsToCopy.map(x => x.c))].sort((a, b) => a - b);
-
-    let clipboardString = "";
-
-    uniqueRows.forEach((rowIndex, i) => {
-      const rowCells = cellsToCopy.filter(c => c.r === rowIndex);
-      const rowStr = uniqueCols.map(colIndex => {
-        const cell = rowCells.find(c => c.c === colIndex);
-        return cell ? cell.val : '';
-      }).join('\t');
-
-      clipboardString += rowStr;
-      if (i < uniqueRows.length - 1) clipboardString += '\n';
-    });
-
-    // 4. Write to clipboard
-    event.clipboardData.setData('text/plain', clipboardString);
-    toast({ title: `Copied ${cellsToCopy.length} cells` });
-  };
-
-  // Paste Handler
-  const handleMeasurementPaste = (rowIndex: number, startColumn: string) => (event: React.ClipboardEvent<HTMLInputElement>) => {
-    const pastedData = event.clipboardData.getData('text');
-    const lines = pastedData.split('\n').filter(line => line.trim());
-    const firstLineColumns = lines[0]?.split('\t') || [];
-
-    if (lines.length > 1 || firstLineColumns.length > 1) {
-      event.preventDefault();
-      // We need to get current measurements from form state
-      // Since we are inside the component, we can use getValues if available or watch
-      // But watch('measurements') is already available as `measurements`
-
-      const startColIndex = columnKeys.indexOf(startColumn);
-      if (startColIndex === -1) return;
-
-      const hasHeader = /pom|name|std|spec|s1|s2|s3|s4|s5|s6/i.test(lines[0]);
-      const dataRows = hasHeader ? lines.slice(1) : lines;
-      const affectedRows = Math.min(dataRows.length, measurementFields.length - rowIndex);
-
-      if (!confirm(`Paste ${dataRows.length} row(s) starting from ${startColumn.toUpperCase()} at row ${rowIndex + 1}?`)) {
-        return;
-      }
-
-      // Paste data starting from the exact cell
-      dataRows.forEach((line, rowOffset) => {
-        const targetRow = rowIndex + rowOffset;
-        if (targetRow < measurementFields.length) {
-          const columns = line.split('\t');
-
-          // Get current samples to modify
-          const currentMeasurements = getValues('measurements');
-          let rowSamples = [...(currentMeasurements[targetRow].samples || [])];
-          let rowChanged = false;
-
-          columns.forEach((value, colOffset) => {
-            const targetColIndex = startColIndex + colOffset;
-            if (targetColIndex < columnKeys.length) {
-              const fieldName = columnKeys[targetColIndex];
-              const cleanValue = value?.trim() || '';
-
-              // Check if it's a sample column (s1, s2...)
-              const sampleMatch = fieldName.match(/^s(\d+)$/);
-              if (sampleMatch) {
-                const sampleIndex = parseInt(sampleMatch[1]);
-                const existingIdx = rowSamples.findIndex(s => s.index === sampleIndex);
-                if (existingIdx >= 0) {
-                  rowSamples[existingIdx] = { ...rowSamples[existingIdx], value: cleanValue };
-                } else {
-                  rowSamples.push({ index: sampleIndex, value: cleanValue });
-                }
-                rowChanged = true;
-              } else {
-                // Standard field (spec, tol, etc)
-                setValue(`measurements.${targetRow}.${fieldName}` as any, cleanValue);
-              }
-            }
-          });
-
-          // After processing all columns for this row, update the samples array if changed
-          if (rowChanged) {
-            setValue(`measurements.${targetRow}.samples` as any, rowSamples);
-          }
-        }
-      });
-      toast({ title: `Pasted ${affectedRows} rows` });
-    }
-  };
+  const {
+    isSelected,
+    handleCellKeyDown,
+    handleCellMouseDown,
+    handleCellMouseEnter,
+    handleTouchStart,
+    handleTouchEnd,
+    handleCopy,
+    handleMeasurementPaste
+  } = useGridInteractions({
+    columnKeys,
+    measurementFieldsLength: measurementFields.length,
+    setValue,
+    getValues,
+    toast,
+  });
 
   // --- Handlers ---
 
@@ -814,7 +377,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
   // Submit form
   const createMutation = useMutation({
-    mutationFn: async (data: FormData) => {
+    mutationFn: async (data: InspectionFormData) => {
       // 1. Prepare defects array
       const defects = Object.entries(defectCounts)
         .flatMap(([description, counts]) => [
@@ -869,7 +432,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
   // Update Mutation
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: FormData }) => {
+    mutationFn: async ({ id, data }: { id: string; data: InspectionFormData }) => {
       // 1. Prepare defects array
       const defects = Object.entries(defectCounts)
         .flatMap(([description, counts]) => [
@@ -929,7 +492,7 @@ export default function FinalInspectionForm({ inspectionId, onClose }: FinalInsp
 
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  const onSubmit = async (data: FormData) => {
+  const onSubmit = async (data: InspectionFormData) => {
     // 1. Prepare defects array
     const defects = Object.entries(defectCounts)
       .flatMap(([description, counts]) => [
